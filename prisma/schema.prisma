@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+model SmartsheetTender {
+  id                            String   @id @default(uuid())
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  enquiryDate                   String?
+  partyName                     String?
+  docketNumber                  String?  @unique
+  utility                       String?
+  quotationNumber               String?
+  quotationDate                 String?
+  accountHolder                 String?
+  allocatedTo                   String?
+  status                        String?
+  reverseAuctionApplicable      String?
+  cvaValue                      String?
+  tenderPurchase                String?
+  attachmentUrl                 String?
+  proposedErpItemName           String?
+  proposedQty                   String?
+  priceBasis                    String?
+  aluminiumPrice                Float?
+  aluminiumAlloyPrice           Float?
+  copperTapePrice               Float?
+  extrudedSemiconductivePrice   Float?
+  htXlpePrice                   Float?
+  pvcTypeSt2Price               Float?
+  galvanisedSteelFlatStripPrice Float?
+  fillerPrice                   Float?
+  contractNo                    String?
+  lastSyncedAt                  DateTime @default(now())
+}
+
+
+model SalesContract {
+  id                      String   @id @default(uuid())
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  quotationNumber         String  
+  contractNumber          String?
+  contractDate            String?
+  customerName            String?
+  partyOrderNo            String?
+  partyOrderDate          String?
+  itemCode                String
+  itemName                String?
+  priceBasis              String?
+  deliveryDate            String?
+  contractQty             String?
+  netContractQty          String?
+  rate                    String?
+  mfgClrnQty              String?
+  balanceContractQty      String?
+  pendingOfferAgainstMC   String?
+  pendingDIAgainstInspection String?
+  pendingDIAgainstContract String?
+  balanceDispatchQty      String?
+  cancelledQty            String?
+  invoiceQty              String?
+  percentBalContractQty   String?
+  itemScheduleName        String?
+  ourStaffName            String?
+  accountClass            String?
+  basicValue              String?
+  closedFlag              String?
+
+  @@unique([quotationNumber, itemCode])
+}

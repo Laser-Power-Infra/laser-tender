@@ -1,0 +1,30 @@
+export interface SalesContract {
+  id?: string;
+  contractNumber: string | null;
+  contractDate: string | null;
+  customerName: string | null;
+  partyOrderNo: string | null;
+  partyOrderDate: string | null;
+  itemCode: string | null;
+  itemName: string | null;
+  priceBasis: string | null;
+  deliveryDate: string | null;
+  contractQty: string | null;
+  netContractQty: string | null;
+  rate: string | null;
+  mfgClrnQty: string | null;
+  balanceContractQty: string | null;
+  pendingOfferAgainstMC: string | null;
+  pendingDIAgainstInspection: string | null;
+  pendingDIAgainstContract: string | null;
+  balanceDispatchQty: string | null;
+  cancelledQty: string | null;
+  invoiceQty: string | null;
+  percentBalContractQty: string | null;
+  itemScheduleName: string | null;
+  ourStaffName: string | null;
+  accountClass: string | null;
+  basicValue: string | null;
+  closedFlag: string | null;
+  quotationNumber: string | null;
+}

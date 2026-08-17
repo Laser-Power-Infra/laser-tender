@@ -1,0 +1,651 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    @apply m-0 bg-[#f4f6f8] font-sans text-navy;
+  }
+}
+
+@keyframes ss-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes blink {
+  0% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.4;
+  }
+}
+
+@layer components {
+  /* ── Tab Navigation ─────────────────────────────────────────────────────── */
+  .tab-nav {
+    @apply flex h-[42px] shrink-0 items-center gap-0 bg-white px-6 border-b-2 border-line;
+  }
+
+  .tab-btn {
+    @apply flex h-full cursor-pointer items-center gap-1.5 border-none bg-transparent px-[18px] border-b-[3px] border-transparent font-sans text-[11px] font-bold text-[#5f6368] uppercase transition-colors;
+    margin-bottom: -2px;
+    letter-spacing: 0.5px;
+  }
+
+  .tab-btn:hover {
+    @apply border-[#c8d0d8] text-navy;
+  }
+
+  .tab-btn.active {
+    @apply border-brand text-brand;
+  }
+
+  .tab-btn .tab-icon {
+    @apply text-[13px];
+  }
+
+  /* ── Tender Dashboard Layout ─────────────────────────────────────────────── */
+  .tender-layout-container {
+    @apply flex flex-1 overflow-hidden bg-[#f4f6f8] font-sans;
+  }
+
+  .tender-sidebar {
+    @apply box-border flex h-full w-[260px] shrink-0 flex-col border-r border-navy-light bg-navy text-white;
+  }
+
+  .tender-sidebar-header {
+    @apply border-b border-navy-light px-5 py-4 text-[13px] font-bold uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .tender-sidebar-body {
+    @apply flex flex-1 flex-col gap-[18px] overflow-y-auto px-5 py-4;
+  }
+
+  .tender-stat-card {
+    @apply rounded-md border border-white/[0.08] bg-white/[0.06] px-[14px] py-3;
+  }
+
+  .tender-stat-label {
+    @apply mb-1 text-[9px] font-bold uppercase text-[#8fa0b5];
+    letter-spacing: 0.6px;
+  }
+
+  .tender-stat-value {
+    @apply text-[22px] font-extrabold tracking-tight text-[#38ef7d];
+  }
+
+  .tender-stat-sub {
+    @apply mt-0.5 text-[10px] text-[#8fa0b5];
+  }
+
+  .tender-filter-section {
+    @apply flex flex-col gap-[7px];
+  }
+
+  .tender-filter-label {
+    @apply text-[10px] font-bold uppercase text-[#8fa0b5];
+    letter-spacing: 0.5px;
+  }
+
+  .tender-filter-input {
+    @apply box-border w-full rounded border border-white/[0.12] bg-white/[0.08] px-2.5 py-[7px] font-sans text-xs text-white transition-all;
+  }
+
+  .tender-filter-input:focus {
+    @apply border-brand bg-white text-navy outline-none;
+  }
+
+  .tender-filter-input::placeholder {
+    color: rgba(255, 255, 255, 0.35);
+  }
+
+  .basic-value-range {
+    @apply flex w-full items-center gap-1.5;
+  }
+
+  .basic-value-range .tender-filter-input {
+    @apply min-w-0 flex-1;
+  }
+
+  .basic-value-range-to {
+    @apply text-[10px] font-semibold whitespace-nowrap text-white/50;
+  }
+
+  .tender-filter-select {
+    @apply box-border w-full cursor-pointer rounded border border-white/[0.12] bg-white/[0.08] px-2.5 py-[7px] font-sans text-xs text-white transition-all;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg fill='white' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+  }
+
+  .tender-filter-select:focus {
+    @apply border-brand bg-white text-navy outline-none;
+    background-image: url("data:image/svg+xml;utf8,<svg fill='%230a2540' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>");
+  }
+
+  .tender-filter-select option {
+    @apply bg-navy text-white;
+  }
+
+  .tender-sidebar-footer {
+    @apply border-t border-navy-light px-5 py-4;
+  }
+
+  .tender-refresh-sidebar-btn {
+    @apply w-full cursor-pointer rounded border-none bg-gradient-to-br from-brand to-brand-dark px-4 py-2.5 font-sans text-xs font-bold uppercase text-white transition-all;
+    box-shadow: 0 4px 10px rgba(0, 112, 243, 0.2);
+    letter-spacing: 0.8px;
+  }
+
+  .tender-refresh-sidebar-btn:hover:not(:disabled) {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+  }
+
+  .tender-refresh-sidebar-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+    transform: none;
+  }
+
+  /* ── Main Workspace ───────────────────────────────────────────────────────── */
+  .tender-workspace {
+    @apply flex flex-1 flex-col overflow-hidden;
+  }
+
+  .tender-top-header {
+    @apply flex h-[54px] shrink-0 items-center justify-between bg-white px-6 border-b border-line;
+    box-shadow: 0 2px 4px rgba(10, 37, 64, 0.02);
+  }
+
+  .tender-header-brand {
+    @apply flex items-center gap-3;
+  }
+
+  .tender-header-title {
+    @apply m-0 text-[16px] font-extrabold text-navy;
+    letter-spacing: 0.5px;
+  }
+
+  .tender-header-title span {
+    @apply font-medium text-brand;
+  }
+
+  .tender-header-divider {
+    @apply h-4 w-px bg-line;
+  }
+
+  .tender-header-subtitle {
+    @apply text-[11px] font-bold uppercase text-[#5f6368];
+    letter-spacing: 1px;
+  }
+
+  .tender-header-actions {
+    @apply flex items-center gap-2;
+  }
+
+  .tender-body {
+    @apply box-border flex flex-1 flex-col overflow-hidden px-6 py-5;
+  }
+
+  .tender-status-bar {
+    @apply flex h-8 shrink-0 items-center justify-between bg-white px-6 text-[10px] font-semibold text-[#5f6368] border-t border-line;
+    letter-spacing: 0.2px;
+  }
+
+  /* ── Smartsheet Table ─────────────────────────────────────────────────────── */
+  .smartsheet-table-container {
+    @apply flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-line bg-white font-sans;
+    box-shadow: 0 4px 12px rgba(10, 37, 64, 0.05);
+  }
+
+  .smartsheet-toolbar {
+    @apply flex shrink-0 items-center justify-between gap-4 bg-navy px-4 py-2.5 text-white;
+  }
+
+  .smartsheet-toolbar-left {
+    @apply flex flex-1 items-center gap-3;
+  }
+
+  .smartsheet-table-title {
+    @apply m-0 text-[13px] font-bold uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .smartsheet-record-badge {
+    @apply rounded-full bg-navy-light px-2 py-[3px] text-[11px] font-semibold whitespace-nowrap text-[#38ef7d];
+  }
+
+  .smartsheet-search-container {
+    @apply relative w-[280px];
+  }
+
+  .smartsheet-search-input {
+    @apply box-border w-full rounded border border-white/[0.2] bg-white/[0.15] py-[7px] pl-[30px] pr-3 font-sans text-xs text-white transition-all;
+  }
+
+  .smartsheet-search-input::placeholder {
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  .smartsheet-search-input:focus {
+    @apply border-brand bg-white text-navy outline-none;
+  }
+
+  .smartsheet-search-icon {
+    @apply pointer-events-none absolute left-[9px] top-1/2 -translate-y-1/2 text-[11px] opacity-55;
+  }
+
+  .smartsheet-table-wrapper {
+    @apply min-h-0 flex-1 overflow-auto;
+  }
+
+  .smartsheet-data-table {
+    @apply w-full border-separate border-spacing-0 text-[13px];
+    table-layout: fixed;
+  }
+
+  .smartsheet-data-table th {
+    @apply sticky top-0 z-[2] cursor-pointer border-b-2 border-r border-line bg-[#f4f6f8] px-3 py-2.5 text-left text-[11px] font-bold uppercase whitespace-nowrap text-navy select-none;
+  }
+
+  .smartsheet-data-table th:last-child {
+    @apply border-r-0;
+  }
+
+  .smartsheet-th-inner {
+    @apply flex items-center justify-between gap-1;
+  }
+
+  .smartsheet-sort-icon {
+    @apply text-[9px] text-black/25;
+  }
+
+  .smartsheet-data-table td {
+    @apply overflow-hidden border-b border-r border-line px-3 py-[9px] whitespace-nowrap align-middle;
+    text-overflow: ellipsis;
+  }
+
+  .smartsheet-data-table td:last-child {
+    @apply border-r-0;
+  }
+
+  .smartsheet-row {
+    @apply bg-white transition-colors;
+    transition-duration: 120ms;
+  }
+
+  .smartsheet-row:hover {
+    @apply bg-[#f8fafc];
+  }
+
+  .smartsheet-null-cell {
+    @apply text-[11px] italic text-[#bcc5ce];
+  }
+
+  .short-close-badge {
+    @apply inline-block rounded-[10px] bg-[#fdecea] px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap text-[#c62828];
+  }
+
+  .allocated-to-display {
+    @apply flex min-h-[20px] cursor-pointer items-center gap-1 rounded-[3px] px-0.5 py-px transition-colors;
+    transition-duration: 120ms;
+  }
+
+  .allocated-to-display:hover {
+    @apply bg-[#e8f0fe];
+  }
+
+  .allocated-edit-icon {
+    @apply text-[11px] text-[#5f6368] opacity-0 transition-opacity;
+    transition-duration: 120ms;
+  }
+
+  .allocated-to-display:hover .allocated-edit-icon {
+    opacity: 0.5;
+  }
+
+  .allocated-edit-input {
+    @apply w-full rounded-[3px] border border-[#1a73e8] bg-white px-1 py-0.5 font-sans text-xs outline-none;
+    box-shadow: 0 1px 3px rgba(26, 115, 232, 0.15);
+  }
+
+  .enquiry-date-badge {
+    @apply inline-block rounded-[10px] border border-[#d2e3fc] bg-[#e8f0fe] px-2 py-0.5 text-[11px] font-semibold text-[#1a73e8];
+    font-variant-numeric: tabular-nums;
+  }
+
+  .purchase-type-badge {
+    @apply inline-block rounded border border-transparent px-[7px] py-0.5 text-[11px] font-bold uppercase;
+    letter-spacing: 0.2px;
+  }
+
+  .purchase-type-badge.tender {
+    @apply border-[#fad2cf] bg-[#fce8e6] text-[#c5221f];
+  }
+
+  .purchase-type-badge.purchase {
+    @apply border-[#c3e6cb] bg-[#e6f7ed] text-[#137333];
+  }
+
+  .purchase-type-badge.budgetary {
+    @apply border-[#ffe89e] bg-[#fef7e0] text-[#b06000];
+  }
+
+  .purchase-type-badge.laser {
+    @apply border-[#e0c8fa] bg-[#f3e8fd] text-[#7928ca];
+  }
+
+  /* ── Footer / Pagination ─────────────────────────────────────────────────── */
+  .smartsheet-table-footer {
+    @apply flex shrink-0 items-center justify-between bg-[#f4f6f8] px-4 py-[9px] text-xs border-t border-line;
+  }
+
+  .smartsheet-footer-left {
+    @apply flex items-center gap-2 text-black/55;
+  }
+
+  .smartsheet-rows-select {
+    @apply cursor-pointer rounded border border-line bg-white px-[7px] py-[3px] font-sans text-xs text-navy;
+  }
+
+  .smartsheet-footer-center {
+    @apply font-medium text-black/50;
+  }
+
+  .smartsheet-pagination {
+    @apply flex items-center gap-[3px];
+  }
+
+  .smartsheet-page-btn {
+    @apply min-w-[30px] cursor-pointer rounded border border-line bg-white px-[9px] py-[5px] text-center text-[11px] font-semibold text-navy transition-all;
+    transition-duration: 120ms;
+  }
+
+  .smartsheet-page-btn:hover:not(:disabled) {
+    @apply bg-[#e1e6eb];
+  }
+
+  .smartsheet-page-btn.active {
+    @apply border-brand bg-brand text-white;
+  }
+
+  .smartsheet-page-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+
+  /* ── States ──────────────────────────────────────────────────────────────── */
+  .smartsheet-state-wrapper {
+    @apply flex min-h-[300px] flex-1 flex-col items-center justify-center gap-[14px] px-8 py-12 text-center;
+  }
+
+  .smartsheet-spinner {
+    @apply h-[38px] w-[38px] rounded-full border-4 border-[#e1e6eb] border-t-brand;
+    animation: ss-spin 0.8s linear infinite;
+  }
+
+  .smartsheet-state-icon {
+    @apply text-[42px];
+  }
+
+  .smartsheet-state-title {
+    @apply m-0 text-[17px] font-bold text-navy;
+  }
+
+  .smartsheet-state-sub {
+    @apply m-0 max-w-[460px] text-[13px] leading-relaxed text-[#5f6368];
+  }
+
+  .smartsheet-error-title {
+    @apply m-0 text-[17px] font-bold text-[#c5221f];
+  }
+
+  .smartsheet-error-code {
+    @apply max-w-[540px] overflow-x-auto rounded border border-[#fcdcdc] bg-[#fdf6f6] px-[14px] py-2 text-left font-mono text-xs text-[#c5221f];
+  }
+
+  .smartsheet-retry-btn {
+    @apply cursor-pointer rounded border-none bg-brand px-5 py-[9px] font-sans text-[13px] font-semibold text-white transition-colors;
+  }
+
+  .smartsheet-retry-btn:hover {
+    @apply bg-brand-dark;
+  }
+
+  .clear-filters-btn {
+    @apply flex cursor-pointer items-center gap-1.5 rounded border border-[#dadce0] bg-[#f1f3f4] px-3 py-2 font-sans text-[11px] font-bold uppercase text-[#3c4043] transition-all;
+    letter-spacing: 0.5px;
+  }
+
+  .clear-filters-btn:hover {
+    @apply border-[#bdc1c6] bg-[#e8eaed] text-[#202124];
+  }
+
+  /* ── Column specific filters ─────────────────────────────────────────────── */
+  .column-filter-container {
+    @apply mt-1.5 box-border flex w-full flex-col gap-1 pr-1.5;
+  }
+
+  .column-search-input {
+    @apply box-border h-6 w-full rounded border border-[#dcdcdc] bg-white px-1.5 py-1 font-sans text-[11px] font-medium text-navy outline-none transition-colors;
+  }
+
+  .column-search-input:focus {
+    @apply border-brand;
+  }
+
+  .column-search-input::placeholder {
+    color: rgba(10, 37, 64, 0.35);
+    font-weight: normal;
+    text-transform: none;
+  }
+
+  .column-date-filter {
+    @apply mt-0.5 flex w-full items-center gap-1;
+  }
+
+  .date-filter-input {
+    @apply box-border h-6 min-w-0 flex-1 rounded border border-[#dcdcdc] bg-white px-1.5 py-1 font-sans text-[11px] font-medium text-navy outline-none transition-colors;
+  }
+
+  .date-filter-input:focus {
+    @apply border-brand;
+  }
+
+  .date-filter-to {
+    @apply text-[10px] font-semibold text-black/50 lowercase;
+  }
+
+  .date-filter-clear-btn {
+    @apply flex h-6 cursor-pointer items-center justify-center bg-transparent px-1 text-[10px] font-bold text-brand transition-colors;
+  }
+
+  .date-filter-clear-btn:hover {
+    @apply text-[#ff6b6b];
+  }
+
+  .price-basis-filter-select {
+    @apply box-border h-6 w-full cursor-pointer rounded border border-[#dcdcdc] bg-white px-1.5 py-1 font-sans text-[11px] font-medium text-navy outline-none transition-colors;
+  }
+
+  .price-basis-filter-select:focus {
+    @apply border-brand;
+  }
+
+  .column-raw-materials-filter {
+    @apply mt-0.5 flex w-full flex-col gap-1;
+  }
+
+  .filter-row {
+    @apply flex items-center gap-1;
+  }
+
+  .filter-row-label {
+    @apply w-5 text-[10px] font-bold text-navy;
+  }
+
+  .col-price-filter-input {
+    @apply box-border h-6 min-w-0 flex-1 rounded border border-[#dcdcdc] bg-white px-1.5 py-1 font-sans text-[11px] font-medium text-navy outline-none;
+  }
+
+  .col-price-filter-input:focus {
+    @apply border-brand;
+  }
+
+  .filter-row-dash {
+    @apply text-[10px] text-black/40;
+  }
+
+  /* ── Custom Multi-select Dropdown ─────────────────────────────────────────── */
+  .custom-multiselect-container {
+    @apply relative w-full;
+  }
+
+  .multiselect-trigger-btn {
+    @apply box-border flex h-6 w-full cursor-pointer items-center justify-between rounded border border-[#dcdcdc] bg-white px-1.5 py-1 font-sans text-[11px] font-medium text-navy outline-none;
+    text-transform: none;
+  }
+
+  .multiselect-trigger-btn:focus {
+    @apply border-brand;
+  }
+
+  .multiselect-dropdown-panel {
+    @apply absolute top-full z-10 mt-1 flex w-[240px] flex-col gap-1.5 rounded-md border border-slate-300 bg-white p-2;
+    box-shadow:
+      0 10px 15px -3px rgba(0, 0, 0, 0.1),
+      0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  }
+
+  .multiselect-actions {
+    @apply flex justify-between border-b border-slate-200 pb-1.5;
+  }
+
+  .multiselect-action-btn {
+    @apply cursor-pointer rounded-[3px] bg-transparent px-1 py-0.5 text-[10px] font-semibold text-brand;
+    text-transform: none;
+  }
+
+  .multiselect-action-btn:hover {
+    @apply bg-slate-100;
+  }
+
+  .multiselect-options-list {
+    @apply flex max-h-[200px] flex-col gap-1 overflow-y-auto;
+  }
+
+  .multiselect-option-label {
+    @apply flex cursor-pointer items-center gap-1.5 rounded-[3px] px-1 py-1 text-left text-[11px] font-medium text-navy whitespace-normal;
+    text-transform: none;
+  }
+
+  .multiselect-option-label:hover {
+    @apply bg-[#f8fafc];
+  }
+
+  .multiselect-option-label input[type="checkbox"] {
+    cursor: pointer;
+  }
+
+  /* ── Column stacking overrides ────────────────────────────────────────────── */
+  .smartsheet-data-table td.col-tender-qty,
+  .smartsheet-data-table td.col-item-name,
+  .smartsheet-data-table td.col-cva-value {
+    max-width: none;
+    overflow: visible;
+    white-space: normal;
+    text-overflow: clip;
+  }
+
+  /* ── Column resize handle ─────────────────────────────────────────────────── */
+  .col-resize-handle {
+    @apply absolute bottom-0 right-[-4px] top-0 z-[25] w-2 cursor-col-resize bg-transparent transition-colors select-none;
+  }
+
+  .col-resize-handle:hover {
+    background-color: rgba(26, 115, 232, 0.4);
+  }
+
+  /* ── Sticky columns ───────────────────────────────────────────────────────── */
+  .sticky-column-header {
+    background-color: #f4f6f8 !important;
+    position: sticky !important;
+    z-index: 4 !important;
+  }
+
+  .sticky-body-cell {
+    background-color: #ffffff !important;
+    position: sticky !important;
+    z-index: 1 !important;
+  }
+
+  .smartsheet-row:hover .sticky-body-cell {
+    background-color: #f8fafc !important;
+  }
+
+  .sticky-col-2 {
+    border-right: 2px solid #cbd5e1 !important;
+    box-shadow: 4px 0 8px -4px rgba(0, 0, 0, 0.15);
+  }
+
+  /* ── Dropdown open elevation ──────────────────────────────────────────────── */
+  .th-dropdown-open {
+    z-index: 30 !important;
+  }
+
+  .sticky-column-header.th-dropdown-open {
+    z-index: 50 !important;
+  }
+
+  /* ── Export Excel button ──────────────────────────────────────────────────── */
+  .export-excel-btn {
+    @apply flex cursor-pointer items-center gap-1.5 rounded border border-excel bg-excel px-3 py-2 font-sans text-[11px] font-bold uppercase text-white transition-all;
+    letter-spacing: 0.5px;
+  }
+
+  .export-excel-btn:hover {
+    @apply border-excel-dark bg-excel-dark;
+  }
+
+  /* ── Reverse Auction toggle ───────────────────────────────────────────────── */
+  .ra-toggle-btn {
+    @apply min-w-[44px] cursor-pointer rounded border border-[#dadce0] bg-white px-3 py-1 font-sans text-[11px] font-semibold text-[#3c4043] transition-all;
+    transition-duration: 150ms;
+  }
+
+  .ra-toggle-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .ra-yes {
+    @apply border-[#4caf50] bg-[#e8f5e9] text-[#2e7d32];
+  }
+
+  .ra-no {
+    @apply border-[#ef5350] bg-[#fbe9e7] text-[#c62828];
+  }
+
+  .ra-inactive {
+    @apply bg-[#f1f3f4] text-[#80868b];
+  }
+
+  .ra-inactive:hover {
+    @apply bg-[#e8eaed];
+  }
+}
