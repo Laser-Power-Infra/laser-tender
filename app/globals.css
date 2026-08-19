@@ -90,6 +90,40 @@
     @apply mt-0.5 text-[10px] text-[#8fa0b5];
   }
 
+  /* ── Assigned Tenders by Person Sidebar Section ────────────────────────── */
+  .assigned-tenders-section {
+    @apply flex flex-col gap-2 mt-1;
+  }
+
+  .assigned-tenders-title {
+    @apply text-[11px] font-extrabold uppercase text-white tracking-wider mb-0.5;
+  }
+
+  .assigned-tender-card {
+    @apply flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-white/[0.12] bg-white/[0.08] cursor-pointer transition-all duration-150 select-none;
+  }
+
+  .assigned-tender-card:hover {
+    @apply bg-white/[0.15] border-white/[0.25];
+  }
+
+  .assigned-tender-card.active {
+    @apply bg-brand/35 border-brand ring-1 ring-brand;
+    box-shadow: 0 0 10px rgba(0, 112, 243, 0.35);
+  }
+
+  .assigned-tender-name {
+    @apply text-[13px] font-medium text-white/90 truncate mr-2;
+  }
+
+  .assigned-tender-card.active .assigned-tender-name {
+    @apply font-bold text-white;
+  }
+
+  .assigned-tender-count {
+    @apply text-[14px] font-extrabold text-white shrink-0;
+  }
+
   .tender-filter-section {
     @apply flex flex-col gap-[7px];
   }
