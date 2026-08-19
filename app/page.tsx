@@ -444,8 +444,11 @@ const TenderDashboardPage: React.FC = () => {
 
     if (!excludeKeys.includes("allocatedTo") && selectedAllocatedTo.length > 0) {
       rows = rows.filter(row => {
-        if (selectedAllocatedTo.includes("(blank)") && !row.allocatedTo) return true;
-        return row.allocatedTo && selectedAllocatedTo.includes(row.allocatedTo.trim());
+        const val = (row.docketNumber && allocatedToOverrides.hasOwnProperty(row.docketNumber))
+          ? allocatedToOverrides[row.docketNumber]
+          : row.allocatedTo;
+        if (selectedAllocatedTo.includes("(blank)") && !val) return true;
+        return val && selectedAllocatedTo.includes(val.trim());
       });
     }
 
@@ -622,18 +625,26 @@ const TenderDashboardPage: React.FC = () => {
   const allocatedToList = useMemo(() => {
     const set = new Set<string>();
     const rows = applyFilters(data, ["allocatedTo"]);
-    rows.forEach(r => { if (r.allocatedTo) set.add(r.allocatedTo.trim()); });
+    rows.forEach(r => {
+      const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
+        ? allocatedToOverrides[r.docketNumber]
+        : r.allocatedTo;
+      if (val) set.add(val.trim());
+    });
     const list = Array.from(set).sort();
     list.push("(blank)");
     return ["All", ...list];
-  }, [data, search, colSearches, tenderPurchaseFilter, selectedAccountHolders, selectedParties, selectedItems, selectedQuotations, selectedUtilities, qtyMin, qtyMax, enquiryStartDate, enquiryEndDate, quotationStartDate, quotationEndDate, priceBasisFilter, alMin, alMax, cuMin, cuMax]);
+  }, [data, allocatedToOverrides, search, colSearches, tenderPurchaseFilter, selectedAccountHolders, selectedParties, selectedItems, selectedQuotations, selectedUtilities, qtyMin, qtyMax, enquiryStartDate, enquiryEndDate, quotationStartDate, quotationEndDate, priceBasisFilter, alMin, alMax, cuMin, cuMax]);
 
   // Allocated To counts for assigned persons sidebar cards (cascading calculation)
   const allocatedToCounts = useMemo(() => {
     const rows = applyFilters(data, ["allocatedTo"]);
     const counts: Record<string, number> = {};
     rows.forEach(r => {
-      const person = r.allocatedTo?.trim();
+      const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
+        ? allocatedToOverrides[r.docketNumber]
+        : r.allocatedTo;
+      const person = val?.trim();
       if (person) {
         counts[person] = (counts[person] || 0) + 1;
       }
@@ -641,8 +652,11 @@ const TenderDashboardPage: React.FC = () => {
 
     const allPersonsSet = new Set<string>();
     data.forEach(r => {
-      if (r.allocatedTo?.trim()) {
-        allPersonsSet.add(r.allocatedTo.trim());
+      const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
+        ? allocatedToOverrides[r.docketNumber]
+        : r.allocatedTo;
+      if (val?.trim()) {
+        allPersonsSet.add(val.trim());
       }
     });
 
@@ -651,6 +665,7 @@ const TenderDashboardPage: React.FC = () => {
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }, [
     data,
+    allocatedToOverrides,
     search,
     colSearches,
     tenderPurchaseFilter,
@@ -846,10 +861,14 @@ const TenderDashboardPage: React.FC = () => {
           </div>
 
           {/* Assigned Tenders By Person */}
-          {allocatedToCounts.length > 0 && (
-            <div className="assigned-tenders-section">
-              <div className="assigned-tenders-title">ASSIGNED TENDERS BY PERSON</div>
-              {allocatedToCounts.map(({ name, count }) => {
+          <div className="assigned-tenders-section">
+            <div className="assigned-tenders-title">ASSIGNED TENDERS BY PERSON</div>
+            {allocatedToCounts.length === 0 ? (
+              <div style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.45)", fontStyle: "italic", padding: "4px 0" }}>
+                {loading ? "Loading assigned persons..." : "No assigned persons found"}
+              </div>
+            ) : (
+              allocatedToCounts.map(({ name, count }) => {
                 const isActive = selectedAllocatedTo.includes(name);
                 return (
                   <div
@@ -862,9 +881,9 @@ const TenderDashboardPage: React.FC = () => {
                     <span className="assigned-tender-count">{count}</span>
                   </div>
                 );
-              })}
-            </div>
-          )}
+              })
+            )}
+          </div>
         </div>
 
         <div className="tender-sidebar-footer">
