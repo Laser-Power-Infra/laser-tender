@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 4111",
+    "dev": "next dev --port 4123",
     "build": "next build",
-    "start": "next start --port 4110",
+    "start": "next start --port 4321",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "sync:costing": "node scripts/syncExternalCosting.mjs"
