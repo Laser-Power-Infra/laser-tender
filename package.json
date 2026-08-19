@@ -6,7 +6,7 @@
     "dev": "next dev --port 4123",
     "build": "next build",
     "start": "next start --port 4173",
-    "build-start": "npx prisma generate && npm run build && npm run start",
+    "build-start": "npx prisma generate && npm run build && next start --port 4173",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "sync:costing": "node scripts/syncExternalCosting.mjs"

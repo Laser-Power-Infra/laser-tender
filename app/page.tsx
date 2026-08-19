@@ -628,6 +628,68 @@ const TenderDashboardPage: React.FC = () => {
     return ["All", ...list];
   }, [data, search, colSearches, tenderPurchaseFilter, selectedAccountHolders, selectedParties, selectedItems, selectedQuotations, selectedUtilities, qtyMin, qtyMax, enquiryStartDate, enquiryEndDate, quotationStartDate, quotationEndDate, priceBasisFilter, alMin, alMax, cuMin, cuMax]);
 
+  // Allocated To counts for assigned persons sidebar cards (cascading calculation)
+  const allocatedToCounts = useMemo(() => {
+    const rows = applyFilters(data, ["allocatedTo"]);
+    const counts: Record<string, number> = {};
+    rows.forEach(r => {
+      const person = r.allocatedTo?.trim();
+      if (person) {
+        counts[person] = (counts[person] || 0) + 1;
+      }
+    });
+
+    const allPersonsSet = new Set<string>();
+    data.forEach(r => {
+      if (r.allocatedTo?.trim()) {
+        allPersonsSet.add(r.allocatedTo.trim());
+      }
+    });
+
+    return Array.from(allPersonsSet)
+      .map(name => ({ name, count: counts[name] || 0 }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [
+    data,
+    search,
+    colSearches,
+    tenderPurchaseFilter,
+    selectedAccountHolders,
+    selectedParties,
+    selectedItems,
+    selectedQuotations,
+    selectedUtilities,
+    qtyMin,
+    qtyMax,
+    enquiryStartDate,
+    enquiryEndDate,
+    quotationStartDate,
+    quotationEndDate,
+    priceBasisFilter,
+    alMin,
+    alMax,
+    cuMin,
+    cuMax
+  ]);
+
+  const handleAllocatedCardClick = (personName: string, e: React.MouseEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      if (selectedAllocatedTo.includes(personName)) {
+        setSelectedAllocatedTo(selectedAllocatedTo.filter(p => p !== personName));
+      } else {
+        setSelectedAllocatedTo([...selectedAllocatedTo, personName]);
+      }
+    } else {
+      if (selectedAllocatedTo.length === 1 && selectedAllocatedTo[0] === personName) {
+        setSelectedAllocatedTo([]);
+      } else {
+        setSelectedAllocatedTo([personName]);
+      }
+    }
+    setPage(1);
+  };
+
+
   // Sort
   const sorted = useMemo<SmartsheetTender[]>(() => {
     return [...filtered].sort((a, b) => cmp(a[sortField], b[sortField], sortDir));
@@ -782,6 +844,27 @@ const TenderDashboardPage: React.FC = () => {
               onChange={e => { setSearch(e.target.value); setPage(1); }}
             />
           </div>
+
+          {/* Assigned Tenders By Person */}
+          {allocatedToCounts.length > 0 && (
+            <div className="assigned-tenders-section">
+              <div className="assigned-tenders-title">ASSIGNED TENDERS BY PERSON</div>
+              {allocatedToCounts.map(({ name, count }) => {
+                const isActive = selectedAllocatedTo.includes(name);
+                return (
+                  <div
+                    key={name}
+                    className={`assigned-tender-card${isActive ? " active" : ""}`}
+                    onClick={(e) => handleAllocatedCardClick(name, e)}
+                    title={`Click to filter by ${name}`}
+                  >
+                    <span className="assigned-tender-name">{name}</span>
+                    <span className="assigned-tender-count">{count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="tender-sidebar-footer">
