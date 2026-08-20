@@ -8,6 +8,7 @@ import {
   updateTenderReverseAuction,
   batchUpdateAllocatedTo,
   scanCostingFiles,
+  refreshCosting,
 } from "@/actions/tenders";
 
 type SortField = keyof SmartsheetTender;
@@ -727,13 +728,11 @@ const TenderDashboardPage: React.FC = () => {
     setPage(1);
   };
 
-  const handleRefresh = async () => { setPage(1); await refresh(); };
-
   const handleRefreshCosting = async () => {
     setCostingRefreshing(true);
     setCostingSummary(null);
-    const summary = await refreshCosting();
-    if (summary) setCostingSummary(summary);
+    const json = await refreshCosting();
+    if (json.success && json.summary) setCostingSummary(json.summary);
     setCostingRefreshing(false);
   };
 
@@ -747,7 +746,6 @@ const TenderDashboardPage: React.FC = () => {
         return;
       }
       setScanSummary(json.scanSummary || null);
-      await refresh();
     } catch (err) {
       console.error("Failed to scan costing files:", err);
     } finally {

@@ -1,5 +1,6 @@
 "use server";
 
+import { refreshCostingData } from "@/lib/costing";
 import { DatabaseSmartsheetService } from "@/services/databaseSmartsheetService";
 
 export interface TenderActionResponse<T = unknown> {
@@ -46,7 +47,7 @@ export async function refreshCosting(): Promise<TenderActionResponse> {
 export async function scanCostingFiles(): Promise<TenderActionResponse> {
   try {
     const result = (await DatabaseSmartsheetService.scanAndUpdateCostingFiles(
-      Number(process.env.COSTING_SCAN_LIMIT )
+      Number(process.env.COSTING_SCAN_LIMIT || 100)
     )) as {
       success: boolean;
       error?: string;
