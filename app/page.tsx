@@ -907,7 +907,7 @@ const TenderDashboardPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="tender-sidebar-footer">
+        {/* <div className="tender-sidebar-footer">
           <button
             className="tender-refresh-sidebar-btn"
             onClick={handleRefresh}
@@ -941,7 +941,7 @@ const TenderDashboardPage: React.FC = () => {
               Costing Files: {scanSummary.matched}/{scanSummary.scanned} found · {scanSummary.remaining} remaining
             </div>
           )}
-        </div>
+        </div> */}
       </aside>
 
       {/* ── Main Workspace ──────────────────────────────────────────────── */}
