@@ -26,8 +26,8 @@ export const useSalesContracts = (): UseSalesContractsResult => {
   const [error, setError] = useState<Error | null>(null);
   const hasData = useRef(false);
 
-  const fetchData = useCallback(async (forceRefresh = false) => {
-    if (forceRefresh || !hasData.current) {
+  const fetchData = useCallback(async () => {
+    if (!hasData.current) {
       setLoading(true);
     }
     setError(null);
@@ -57,7 +57,7 @@ export const useSalesContracts = (): UseSalesContractsResult => {
   }, [fetchData]);
 
   const refresh = useCallback(async () => {
-    await fetchData(true);
+    await fetchData();
   }, [fetchData]);
 
   const sync = useCallback(async () => {
@@ -69,7 +69,7 @@ export const useSalesContracts = (): UseSalesContractsResult => {
         const msg = json.error || "Server error";
         throw new Error(msg);
       }
-      await fetchData(true);
+      await fetchData();
       return json.result || null;
     } catch (err) {
       setError(err instanceof Error ? err : new Error("Failed to sync Sales Contract data"));

@@ -9,7 +9,10 @@
     "build-start": "npx prisma generate && npm run build && next start --port 4173",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
-    "sync:costing": "node scripts/syncExternalCosting.mjs"
+    "sync:costing": "node scripts/syncExternalCosting.mjs",
+    "scan:costing-files": "node scripts/scanCostingFiles.mjs",
+    "backfill:contracts": "node scripts/backfillContractFromXls.mjs",
+    "backfill:contracts:dry": "node scripts/backfillContractFromXls.mjs --dry-run"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

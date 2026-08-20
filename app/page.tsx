@@ -7,6 +7,8 @@ import {
   updateTenderStatus,
   updateTenderReverseAuction,
   batchUpdateAllocatedTo,
+  scanCostingFiles,
+  refreshCosting,
 } from "@/actions/tenders";
 
 type SortField = keyof SmartsheetTender;
@@ -24,6 +26,7 @@ const COLUMNS: ColDef[] = [
   { key: "docketNumber",    label: "Docket Number",      width: 160 },
   { key: "utility",         label: "Utility",            width: 200 },
   { key: "quotationNumber", label: "Quotation Number",   width: 170 },
+  { key: "contractNo",      label: "Contract Number",    width: 220 },
   { key: "quotationDate",   label: "Quotation Date",     width: 190 },
   { key: "accountHolder",   label: "Account Holder",     width: 180 },
   { key: "allocatedTo",     label: "Allocated To",       width: 180 },
@@ -33,7 +36,7 @@ const COLUMNS: ColDef[] = [
   { key: "tenderPurchase",      label: "Tender / Purchase",  width: 150 },
   { key: "proposedErpItemName", label: "Item Name",          width: 250 },
   { key: "proposedQty",         label: "Tender Qty",         width: 140 },
-  { key: "attachmentUrl",       label: "Attachment",         width: 130 },
+  { key: "attachmentUrl",       label: "Attachment",         width: 150 },
   { key: "priceBasis",          label: "Price Basis",        width: 130 },
   { key: "rawMaterials",        label: "Raw Materials",      width: 260 },
 ];
@@ -84,13 +87,15 @@ function parseQuantities(qtyStr: string | null): number[] {
 }
 
 const TenderDashboardPage: React.FC = () => {
-  const { data, loading, error, refresh, refreshCosting } = useSmartsheetTenders();
+  const { data, loading, error } = useSmartsheetTenders();
 
   const [search, setSearch]           = useState("");
   const [sortField, setSortField]     = useState<SortField>("enquiryDate");
   const [sortDir, setSortDir]         = useState<SortDir>("desc");
   const [costingRefreshing, setCostingRefreshing] = useState(false);
   const [costingSummary, setCostingSummary] = useState<{ matched: number; total: number } | null>(null);
+  const [scanningCosting, setScanningCosting] = useState(false);
+  const [scanSummary, setScanSummary] = useState<{ scanned: number; matched: number; notFound: number; total: number; remaining: number } | null>(null);
   const [page, setPage]           = useState(1);
   const [pageSize, setPageSize]   = useState(50);
 
@@ -126,6 +131,7 @@ const TenderDashboardPage: React.FC = () => {
     docketNumber: "",
     utility: "",
     quotationNumber: "",
+    contractNo: "",
     quotationDate: "",
     accountHolder: "",
     allocatedTo: "",
@@ -340,6 +346,7 @@ const TenderDashboardPage: React.FC = () => {
       docketNumber: "",
       utility: "",
       quotationNumber: "",
+      contractNo: "",
       quotationDate: "",
       accountHolder: "",
       allocatedTo: "",
@@ -444,8 +451,11 @@ const TenderDashboardPage: React.FC = () => {
 
     if (!excludeKeys.includes("allocatedTo") && selectedAllocatedTo.length > 0) {
       rows = rows.filter(row => {
-        if (selectedAllocatedTo.includes("(blank)") && !row.allocatedTo) return true;
-        return row.allocatedTo && selectedAllocatedTo.includes(row.allocatedTo.trim());
+        const val = (row.docketNumber && allocatedToOverrides.hasOwnProperty(row.docketNumber))
+          ? allocatedToOverrides[row.docketNumber]
+          : row.allocatedTo;
+        if (selectedAllocatedTo.includes("(blank)") && !val) return true;
+        return val && selectedAllocatedTo.includes(val.trim());
       });
     }
 
@@ -622,18 +632,26 @@ const TenderDashboardPage: React.FC = () => {
   const allocatedToList = useMemo(() => {
     const set = new Set<string>();
     const rows = applyFilters(data, ["allocatedTo"]);
-    rows.forEach(r => { if (r.allocatedTo) set.add(r.allocatedTo.trim()); });
+    rows.forEach(r => {
+      const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
+        ? allocatedToOverrides[r.docketNumber]
+        : r.allocatedTo;
+      if (val) set.add(val.trim());
+    });
     const list = Array.from(set).sort();
     list.push("(blank)");
     return ["All", ...list];
-  }, [data, search, colSearches, tenderPurchaseFilter, selectedAccountHolders, selectedParties, selectedItems, selectedQuotations, selectedUtilities, qtyMin, qtyMax, enquiryStartDate, enquiryEndDate, quotationStartDate, quotationEndDate, priceBasisFilter, alMin, alMax, cuMin, cuMax]);
+  }, [data, allocatedToOverrides, search, colSearches, tenderPurchaseFilter, selectedAccountHolders, selectedParties, selectedItems, selectedQuotations, selectedUtilities, qtyMin, qtyMax, enquiryStartDate, enquiryEndDate, quotationStartDate, quotationEndDate, priceBasisFilter, alMin, alMax, cuMin, cuMax]);
 
   // Allocated To counts for assigned persons sidebar cards (cascading calculation)
   const allocatedToCounts = useMemo(() => {
     const rows = applyFilters(data, ["allocatedTo"]);
     const counts: Record<string, number> = {};
     rows.forEach(r => {
-      const person = r.allocatedTo?.trim();
+      const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
+        ? allocatedToOverrides[r.docketNumber]
+        : r.allocatedTo;
+      const person = val?.trim();
       if (person) {
         counts[person] = (counts[person] || 0) + 1;
       }
@@ -641,8 +659,11 @@ const TenderDashboardPage: React.FC = () => {
 
     const allPersonsSet = new Set<string>();
     data.forEach(r => {
-      if (r.allocatedTo?.trim()) {
-        allPersonsSet.add(r.allocatedTo.trim());
+      const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
+        ? allocatedToOverrides[r.docketNumber]
+        : r.allocatedTo;
+      if (val?.trim()) {
+        allPersonsSet.add(val.trim());
       }
     });
 
@@ -651,6 +672,7 @@ const TenderDashboardPage: React.FC = () => {
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }, [
     data,
+    allocatedToOverrides,
     search,
     colSearches,
     tenderPurchaseFilter,
@@ -708,14 +730,29 @@ const TenderDashboardPage: React.FC = () => {
     setPage(1);
   };
 
-  const handleRefresh = async () => { setPage(1); await refresh(); };
-
   const handleRefreshCosting = async () => {
     setCostingRefreshing(true);
     setCostingSummary(null);
-    const summary = await refreshCosting();
-    if (summary) setCostingSummary(summary);
+    const json = await refreshCosting();
+    if (json.success && json.summary) setCostingSummary(json.summary);
     setCostingRefreshing(false);
+  };
+
+  const handleScanCostingFiles = async () => {
+    setScanningCosting(true);
+    setScanSummary(null);
+    try {
+      const json = await scanCostingFiles();
+      if (!json.success) {
+        console.error("Failed to scan costing files:", json.error);
+        return;
+      }
+      setScanSummary(json.scanSummary || null);
+    } catch (err) {
+      console.error("Failed to scan costing files:", err);
+    } finally {
+      setScanningCosting(false);
+    }
   };
 
   const handleExportExcel = () => {
@@ -848,10 +885,14 @@ const TenderDashboardPage: React.FC = () => {
           </div>
 
           {/* Assigned Tenders By Person */}
-          {allocatedToCounts.length > 0 && (
-            <div className="assigned-tenders-section">
-              <div className="assigned-tenders-title">ASSIGNED TENDERS BY PERSON</div>
-              {allocatedToCounts.map(({ name, count }) => {
+          <div className="assigned-tenders-section">
+            <div className="assigned-tenders-title">ASSIGNED TENDERS BY PERSON</div>
+            {allocatedToCounts.length === 0 ? (
+              <div style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.45)", fontStyle: "italic", padding: "4px 0" }}>
+                {loading ? "Loading assigned persons..." : "No assigned persons found"}
+              </div>
+            ) : (
+              allocatedToCounts.map(({ name, count }) => {
                 const isActive = selectedAllocatedTo.includes(name);
                 return (
                   <div
@@ -864,12 +905,12 @@ const TenderDashboardPage: React.FC = () => {
                     <span className="assigned-tender-count">{count}</span>
                   </div>
                 );
-              })}
-            </div>
-          )}
+              })
+            )}
+          </div>
         </div>
 
-        <div className="tender-sidebar-footer">
+        {/* <div className="tender-sidebar-footer">
           <button
             className="tender-refresh-sidebar-btn"
             onClick={handleRefresh}
@@ -885,12 +926,25 @@ const TenderDashboardPage: React.FC = () => {
           >
             {costingRefreshing ? "📎 Fetching..." : "📎 Refresh Costing"}
           </button>
+          <button
+            className="tender-refresh-sidebar-btn"
+            onClick={handleScanCostingFiles}
+            disabled={loading || scanningCosting}
+            style={{ marginTop: 8 }}
+          >
+            {scanningCosting ? "📁 Scanning..." : "📁 Scan Costing Files"}
+          </button>
           {costingSummary && (
             <div style={{ fontSize: 11, color: "#5f6368", marginTop: 4, textAlign: "center" }}>
               Costing: {costingSummary.matched}/{costingSummary.total} records matched
             </div>
           )}
-        </div>
+          {scanSummary && (
+            <div style={{ fontSize: 11, color: "#5f6368", marginTop: 4, textAlign: "center" }}>
+              Costing Files: {scanSummary.matched}/{scanSummary.scanned} found · {scanSummary.remaining} remaining
+            </div>
+          )}
+        </div> */}
       </aside>
 
       {/* ── Main Workspace ──────────────────────────────────────────────── */}
@@ -954,7 +1008,7 @@ const TenderDashboardPage: React.FC = () => {
                 <h3 className="smartsheet-error-title">Failed to Load Tender Data</h3>
                 <p className="smartsheet-state-sub">{error.message}</p>
                 <div className="smartsheet-error-code">{error.message}</div>
-                <button className="smartsheet-retry-btn" onClick={handleRefresh}>
+                <button className="smartsheet-retry-btn" onClick={() => window.location.reload()}>
                   Retry Connection
                 </button>
               </div>
@@ -1484,6 +1538,18 @@ const TenderDashboardPage: React.FC = () => {
                             <td style={{ fontFamily: "monospace" }}>
                               {row.quotationNumber ?? <span className="smartsheet-null-cell">—</span>}
                             </td>
+                            {/* Contract Number */}
+                            <td style={{ fontFamily: "monospace", fontWeight: 600, color: "#0a2540" }} title={row.contractNo ?? undefined}>
+                              {row.contractNo ? (
+                                row.contractNo.includes(",") ? (
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                    {row.contractNo.split(",").map((c) => c.trim()).filter(Boolean).map((c, i) => (
+                                      <span key={i} style={{ display: "inline-block", background: "#e8f0fe", padding: "1px 5px", borderRadius: "3px", border: "1px solid #d2e3fc", fontSize: "11px", width: "fit-content" }}>{c}</span>
+                                    ))}
+                                  </div>
+                                ) : row.contractNo
+                              ) : <span className="smartsheet-null-cell">—</span>}
+                            </td>
                             {/* Quotation Date */}
                             <td>
                               {row.quotationDate ?? <span className="smartsheet-null-cell">—</span>}
@@ -1683,16 +1749,27 @@ const TenderDashboardPage: React.FC = () => {
                             {/* Attachment */}
                             <td style={{ textAlign: "center" }}>
                               {row.attachmentUrl ? (
-                                <button
-                                  className="table-attachment-btn"
-                                  onClick={() => {
-                                    window.open(row.attachmentUrl!, "_blank");
-                                  }}
-                                  title="View Costing Sheet"
-                                  style={{ padding: "4px 8px", background: "#e8f0fe", color: "#1a73e8", border: "1px solid #d2e3fc", borderRadius: "4px", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}
-                                >
-                                  📎 Costing
-                                </button>
+                                row.attachmentUrl.startsWith("COST|") ? (
+                                  <a
+                                    href={`/api/costing/download?docket=${encodeURIComponent(row.docketNumber || "")}`}
+                                    className="table-attachment-btn"
+                                    title="Download Costing File"
+                                    style={{ padding: "4px 8px", background: "#e8f0fe", color: "#1a73e8", border: "1px solid #d2e3fc", borderRadius: "4px", fontSize: "11px", fontWeight: 600, cursor: "pointer", textDecoration: "none", display: "inline-block" }}
+                                  >
+                                    ⬇️ Costing File
+                                  </a>
+                                ) : (
+                                  <button
+                                    className="table-attachment-btn"
+                                    onClick={() => {
+                                      window.open(row.attachmentUrl!, "_blank");
+                                    }}
+                                    title="View Costing Sheet"
+                                    style={{ padding: "4px 8px", background: "#e8f0fe", color: "#1a73e8", border: "1px solid #d2e3fc", borderRadius: "4px", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}
+                                  >
+                                    📎 Costing
+                                  </button>
+                                )
                               ) : (
                                 <span className="smartsheet-null-cell">—</span>
                               )}

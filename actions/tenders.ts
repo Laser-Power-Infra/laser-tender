@@ -1,8 +1,7 @@
 "use server";
 
-import { DatabaseSmartsheetService } from "@/services/databaseSmartsheetService";
-import { syncSmartsheetToDb } from "@/lib/smartsheet-sync";
 import { refreshCostingData } from "@/lib/costing";
+import { DatabaseSmartsheetService } from "@/services/databaseSmartsheetService";
 
 export interface TenderActionResponse<T = unknown> {
   success: boolean;
@@ -10,15 +9,11 @@ export interface TenderActionResponse<T = unknown> {
   error?: string;
   summary?: { matched: number; total: number };
   updatedCount?: number;
+  scanSummary?: { scanned: number; matched: number; notFound: number; total: number; remaining: number };
 }
 
-export async function getSmartsheetTenders(forceFresh = false): Promise<TenderActionResponse> {
+export async function getSmartsheetTenders(): Promise<TenderActionResponse> {
   try {
-    if (forceFresh) {
-      syncSmartsheetToDb().catch((err) =>
-        console.error("[SmartsheetAPI] Sync on fresh:", err instanceof Error ? err.message : err)
-      );
-    }
     const data = await DatabaseSmartsheetService.getAllSmartsheetTenders();
     return { success: true, data };
   } catch (err) {
@@ -45,6 +40,44 @@ export async function refreshCosting(): Promise<TenderActionResponse> {
       success: false,
       data: [],
       error: err instanceof Error ? err.message : "Failed to refresh costing data.",
+    };
+  }
+}
+
+export async function scanCostingFiles(): Promise<TenderActionResponse> {
+  try {
+    const result = (await DatabaseSmartsheetService.scanAndUpdateCostingFiles(
+      Number(process.env.COSTING_SCAN_LIMIT || 100)
+    )) as {
+      success: boolean;
+      error?: string;
+      scanned: number;
+      matched: number;
+      notFound: number;
+      total: number;
+      remaining: number;
+    };
+    if (!result.success) {
+      return { success: false, data: [], error: result.error || "Failed to scan costing files." };
+    }
+    const data = await DatabaseSmartsheetService.getAllSmartsheetTenders();
+    return {
+      success: true,
+      data,
+      scanSummary: {
+        scanned: result.scanned,
+        matched: result.matched,
+        notFound: result.notFound,
+        total: result.total,
+        remaining: result.remaining,
+      },
+    };
+  } catch (err) {
+    console.error("[CostingFileScan] Error:", err);
+    return {
+      success: false,
+      data: [],
+      error: err instanceof Error ? err.message : "Failed to scan costing files.",
     };
   }
 }
