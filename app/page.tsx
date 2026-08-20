@@ -672,6 +672,8 @@ const TenderDashboardPage: React.FC = () => {
     cuMax
   ]);
 
+  console.log("allocated: ",allocatedToCounts)
+
   const handleAllocatedCardClick = (personName: string, e: React.MouseEvent) => {
     if (e.ctrlKey || e.metaKey) {
       if (selectedAllocatedTo.includes(personName)) {
