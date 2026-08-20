@@ -447,8 +447,11 @@ const TenderDashboardPage: React.FC = () => {
 
     if (!excludeKeys.includes("allocatedTo") && selectedAllocatedTo.length > 0) {
       rows = rows.filter(row => {
-        if (selectedAllocatedTo.includes("(blank)") && !row.allocatedTo) return true;
-        return row.allocatedTo && selectedAllocatedTo.includes(row.allocatedTo.trim());
+        const val = (row.docketNumber && allocatedToOverrides.hasOwnProperty(row.docketNumber))
+          ? allocatedToOverrides[row.docketNumber]
+          : row.allocatedTo;
+        if (selectedAllocatedTo.includes("(blank)") && !val) return true;
+        return val && selectedAllocatedTo.includes(val.trim());
       });
     }
 
@@ -625,11 +628,85 @@ const TenderDashboardPage: React.FC = () => {
   const allocatedToList = useMemo(() => {
     const set = new Set<string>();
     const rows = applyFilters(data, ["allocatedTo"]);
-    rows.forEach(r => { if (r.allocatedTo) set.add(r.allocatedTo.trim()); });
+    rows.forEach(r => {
+      const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
+        ? allocatedToOverrides[r.docketNumber]
+        : r.allocatedTo;
+      if (val) set.add(val.trim());
+    });
     const list = Array.from(set).sort();
     list.push("(blank)");
     return ["All", ...list];
-  }, [data, search, colSearches, tenderPurchaseFilter, selectedAccountHolders, selectedParties, selectedItems, selectedQuotations, selectedUtilities, qtyMin, qtyMax, enquiryStartDate, enquiryEndDate, quotationStartDate, quotationEndDate, priceBasisFilter, alMin, alMax, cuMin, cuMax]);
+  }, [data, allocatedToOverrides, search, colSearches, tenderPurchaseFilter, selectedAccountHolders, selectedParties, selectedItems, selectedQuotations, selectedUtilities, qtyMin, qtyMax, enquiryStartDate, enquiryEndDate, quotationStartDate, quotationEndDate, priceBasisFilter, alMin, alMax, cuMin, cuMax]);
+
+  // Allocated To counts for assigned persons sidebar cards (cascading calculation)
+  const allocatedToCounts = useMemo(() => {
+    const rows = applyFilters(data, ["allocatedTo"]);
+    const counts: Record<string, number> = {};
+    rows.forEach(r => {
+      const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
+        ? allocatedToOverrides[r.docketNumber]
+        : r.allocatedTo;
+      const person = val?.trim();
+      if (person) {
+        counts[person] = (counts[person] || 0) + 1;
+      }
+    });
+
+    const allPersonsSet = new Set<string>();
+    data.forEach(r => {
+      const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
+        ? allocatedToOverrides[r.docketNumber]
+        : r.allocatedTo;
+      if (val?.trim()) {
+        allPersonsSet.add(val.trim());
+      }
+    });
+
+    return Array.from(allPersonsSet)
+      .map(name => ({ name, count: counts[name] || 0 }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [
+    data,
+    allocatedToOverrides,
+    search,
+    colSearches,
+    tenderPurchaseFilter,
+    selectedAccountHolders,
+    selectedParties,
+    selectedItems,
+    selectedQuotations,
+    selectedUtilities,
+    qtyMin,
+    qtyMax,
+    enquiryStartDate,
+    enquiryEndDate,
+    quotationStartDate,
+    quotationEndDate,
+    priceBasisFilter,
+    alMin,
+    alMax,
+    cuMin,
+    cuMax
+  ]);
+
+  const handleAllocatedCardClick = (personName: string, e: React.MouseEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      if (selectedAllocatedTo.includes(personName)) {
+        setSelectedAllocatedTo(selectedAllocatedTo.filter(p => p !== personName));
+      } else {
+        setSelectedAllocatedTo([...selectedAllocatedTo, personName]);
+      }
+    } else {
+      if (selectedAllocatedTo.length === 1 && selectedAllocatedTo[0] === personName) {
+        setSelectedAllocatedTo([]);
+      } else {
+        setSelectedAllocatedTo([personName]);
+      }
+    }
+    setPage(1);
+  };
+
 
   // Sort
   const sorted = useMemo<SmartsheetTender[]>(() => {
@@ -802,6 +879,31 @@ const TenderDashboardPage: React.FC = () => {
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1); }}
             />
+          </div>
+
+          {/* Assigned Tenders By Person */}
+          <div className="assigned-tenders-section">
+            <div className="assigned-tenders-title">ASSIGNED TENDERS BY PERSON</div>
+            {allocatedToCounts.length === 0 ? (
+              <div style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.45)", fontStyle: "italic", padding: "4px 0" }}>
+                {loading ? "Loading assigned persons..." : "No assigned persons found"}
+              </div>
+            ) : (
+              allocatedToCounts.map(({ name, count }) => {
+                const isActive = selectedAllocatedTo.includes(name);
+                return (
+                  <div
+                    key={name}
+                    className={`assigned-tender-card${isActive ? " active" : ""}`}
+                    onClick={(e) => handleAllocatedCardClick(name, e)}
+                    title={`Click to filter by ${name}`}
+                  >
+                    <span className="assigned-tender-name">{name}</span>
+                    <span className="assigned-tender-count">{count}</span>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 
