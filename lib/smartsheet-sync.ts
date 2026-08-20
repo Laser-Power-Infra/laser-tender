@@ -8,7 +8,6 @@ export interface SmartsheetRecord {
   quotationNumber: string | null;
   quotationDate: string | null;
   accountHolder: string | null;
-  allocatedTo: string | null;
   tenderPurchase: string | null;
 }
 
@@ -67,7 +66,6 @@ async function fetchSmartsheetData(): Promise<{
       quotationNumber: get("quotationNumber"),
       quotationDate: get("quotationDate"),
       accountHolder: get("accountHolder"),
-      allocatedTo: null,
       tenderPurchase: get("tenderPurchase"),
     };
   });

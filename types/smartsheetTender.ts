@@ -16,6 +16,7 @@ export interface SmartsheetTender {
   reverseAuctionApplicable: string | null;
   tenderPurchase: string | null;
   cvaValue?: string | null;
+  contractNo?: string | null;
   
   // Enriched costing details from joined Excel
   attachmentUrl?: string | null;

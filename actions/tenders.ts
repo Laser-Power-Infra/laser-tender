@@ -1,8 +1,6 @@
 "use server";
 
 import { DatabaseSmartsheetService } from "@/services/databaseSmartsheetService";
-import { syncSmartsheetToDb } from "@/lib/smartsheet-sync";
-import { refreshCostingData } from "@/lib/costing";
 
 export interface TenderActionResponse<T = unknown> {
   success: boolean;
@@ -12,13 +10,8 @@ export interface TenderActionResponse<T = unknown> {
   updatedCount?: number;
 }
 
-export async function getSmartsheetTenders(forceFresh = false): Promise<TenderActionResponse> {
+export async function getSmartsheetTenders(): Promise<TenderActionResponse> {
   try {
-    if (forceFresh) {
-      syncSmartsheetToDb().catch((err) =>
-        console.error("[SmartsheetAPI] Sync on fresh:", err instanceof Error ? err.message : err)
-      );
-    }
     const data = await DatabaseSmartsheetService.getAllSmartsheetTenders();
     return { success: true, data };
   } catch (err) {
@@ -27,24 +20,6 @@ export async function getSmartsheetTenders(forceFresh = false): Promise<TenderAc
       success: false,
       data: [],
       error: err instanceof Error ? err.message : "An unexpected server error occurred.",
-    };
-  }
-}
-
-export async function refreshCosting(): Promise<TenderActionResponse> {
-  try {
-    const result = await refreshCostingData();
-    return {
-      success: true,
-      data: result.data,
-      summary: { matched: result.matchedCount, total: result.totalCount },
-    };
-  } catch (err) {
-    console.error("[CostingRefresh] Error:", err);
-    return {
-      success: false,
-      data: [],
-      error: err instanceof Error ? err.message : "Failed to refresh costing data.",
     };
   }
 }

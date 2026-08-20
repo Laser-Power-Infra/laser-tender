@@ -24,6 +24,7 @@ const COLUMNS: ColDef[] = [
   { key: "docketNumber",    label: "Docket Number",      width: 160 },
   { key: "utility",         label: "Utility",            width: 200 },
   { key: "quotationNumber", label: "Quotation Number",   width: 170 },
+  { key: "contractNo",      label: "Contract Number",    width: 220 },
   { key: "quotationDate",   label: "Quotation Date",     width: 190 },
   { key: "accountHolder",   label: "Account Holder",     width: 180 },
   { key: "allocatedTo",     label: "Allocated To",       width: 180 },
@@ -84,13 +85,11 @@ function parseQuantities(qtyStr: string | null): number[] {
 }
 
 const TenderDashboardPage: React.FC = () => {
-  const { data, loading, error, refresh, refreshCosting } = useSmartsheetTenders();
+  const { data, loading, error } = useSmartsheetTenders();
 
   const [search, setSearch]           = useState("");
   const [sortField, setSortField]     = useState<SortField>("enquiryDate");
   const [sortDir, setSortDir]         = useState<SortDir>("desc");
-  const [costingRefreshing, setCostingRefreshing] = useState(false);
-  const [costingSummary, setCostingSummary] = useState<{ matched: number; total: number } | null>(null);
   const [page, setPage]           = useState(1);
   const [pageSize, setPageSize]   = useState(50);
 
@@ -126,6 +125,7 @@ const TenderDashboardPage: React.FC = () => {
     docketNumber: "",
     utility: "",
     quotationNumber: "",
+    contractNo: "",
     quotationDate: "",
     accountHolder: "",
     allocatedTo: "",
@@ -340,6 +340,7 @@ const TenderDashboardPage: React.FC = () => {
       docketNumber: "",
       utility: "",
       quotationNumber: "",
+      contractNo: "",
       quotationDate: "",
       accountHolder: "",
       allocatedTo: "",
@@ -721,16 +722,6 @@ const TenderDashboardPage: React.FC = () => {
     setPage(1);
   };
 
-  const handleRefresh = async () => { setPage(1); await refresh(); };
-
-  const handleRefreshCosting = async () => {
-    setCostingRefreshing(true);
-    setCostingSummary(null);
-    const summary = await refreshCosting();
-    if (summary) setCostingSummary(summary);
-    setCostingRefreshing(false);
-  };
-
   const handleExportExcel = () => {
     const tableHeader = COLUMNS.map(c => `<th style="background-color:#0a2540;color:#ffffff;font-weight:bold;padding:8px;border:1px solid #ddd;">${c.label}</th>`).join("");
     const tableRows = sorted.map(rec => {
@@ -887,26 +878,9 @@ const TenderDashboardPage: React.FC = () => {
         </div>
 
         <div className="tender-sidebar-footer">
-          <button
-            className="tender-refresh-sidebar-btn"
-            onClick={handleRefresh}
-            disabled={loading}
-          >
-            {loading ? "🔄 Loading..." : "🔄 Refresh Data"}
-          </button>
-          <button
-            className="tender-refresh-sidebar-btn"
-            onClick={handleRefreshCosting}
-            disabled={loading || costingRefreshing}
-            style={{ marginTop: 8 }}
-          >
-            {costingRefreshing ? "📎 Fetching..." : "📎 Refresh Costing"}
-          </button>
-          {costingSummary && (
-            <div style={{ fontSize: 11, color: "#5f6368", marginTop: 4, textAlign: "center" }}>
-              Costing: {costingSummary.matched}/{costingSummary.total} records matched
-            </div>
-          )}
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", textAlign: "center", padding: "8px 0" }}>
+            Data syncs automatically • 30s polling
+          </div>
         </div>
       </aside>
 
@@ -971,7 +945,7 @@ const TenderDashboardPage: React.FC = () => {
                 <h3 className="smartsheet-error-title">Failed to Load Tender Data</h3>
                 <p className="smartsheet-state-sub">{error.message}</p>
                 <div className="smartsheet-error-code">{error.message}</div>
-                <button className="smartsheet-retry-btn" onClick={handleRefresh}>
+                <button className="smartsheet-retry-btn" onClick={() => window.location.reload()}>
                   Retry Connection
                 </button>
               </div>
@@ -1500,6 +1474,18 @@ const TenderDashboardPage: React.FC = () => {
                             {/* Quotation Number */}
                             <td style={{ fontFamily: "monospace" }}>
                               {row.quotationNumber ?? <span className="smartsheet-null-cell">—</span>}
+                            </td>
+                            {/* Contract Number */}
+                            <td style={{ fontFamily: "monospace", fontWeight: 600, color: "#0a2540" }} title={row.contractNo ?? undefined}>
+                              {row.contractNo ? (
+                                row.contractNo.includes(",") ? (
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                    {row.contractNo.split(",").map((c) => c.trim()).filter(Boolean).map((c, i) => (
+                                      <span key={i} style={{ display: "inline-block", background: "#e8f0fe", padding: "1px 5px", borderRadius: "3px", border: "1px solid #d2e3fc", fontSize: "11px", width: "fit-content" }}>{c}</span>
+                                    ))}
+                                  </div>
+                                ) : row.contractNo
+                              ) : <span className="smartsheet-null-cell">—</span>}
                             </td>
                             {/* Quotation Date */}
                             <td>

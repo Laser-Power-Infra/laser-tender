@@ -6,6 +6,8 @@ const cleanFloat = (val) => {
   return isNaN(num) ? null : num;
 };
 
+const isNullishForSync = (val) => val === null || val === undefined || val === "";
+
 const isRecordModified = (sheet, db) => {
   const fields = [
     { name: "enquiryDate", type: "string" },
@@ -15,12 +17,15 @@ const isRecordModified = (sheet, db) => {
     { name: "quotationNumber", type: "string" },
     { name: "quotationDate", type: "string" },
     { name: "accountHolder", type: "string" },
+    // { name: "allocatedTo", type: "string" },
+    // { name: "status", type: "string" },
     { name: "reverseAuctionApplicable", type: "string" },
     { name: "tenderPurchase", type: "string" },
     { name: "attachmentUrl", type: "string" },
     { name: "proposedErpItemName", type: "string" },
     { name: "proposedQty", type: "string" },
     { name: "priceBasis", type: "string" },
+    { name: "contractNo", type: "string" },
     { name: "aluminiumPrice", type: "float" },
     { name: "aluminiumAlloyPrice", type: "float" },
     { name: "copperTapePrice", type: "float" },
@@ -34,6 +39,11 @@ const isRecordModified = (sheet, db) => {
   for (const field of fields) {
     let sheetVal = sheet[field.name];
     let dbVal = db[field.name];
+
+    // Sync must never clear: if sheet doesn't provide a value, don't treat as modified
+    if (isNullishForSync(sheetVal)) {
+      continue;
+    }
 
     if (field.type === "float") {
       const v1 = sheetVal !== null && sheetVal !== undefined && sheetVal !== "" ? parseFloat(sheetVal) : null;
@@ -90,7 +100,7 @@ export class DatabaseSmartsheetService {
         const docketKey = record.docketNumber.trim();
         const dbRecord = existingMap.get(docketKey);
 
-        const data = {
+        const buildCreateData = () => ({
           enquiryDate: record.enquiryDate || null,
           partyName: record.partyName || null,
           docketNumber: docketKey,
@@ -104,6 +114,7 @@ export class DatabaseSmartsheetService {
           proposedErpItemName: record.proposedErpItemName || null,
           proposedQty: record.proposedQty || null,
           priceBasis: record.priceBasis || null,
+          contractNo: record.contractNo || null,
           aluminiumPrice: cleanFloat(record.aluminiumPrice),
           aluminiumAlloyPrice: cleanFloat(record.aluminiumAlloyPrice),
           copperTapePrice: cleanFloat(record.copperTapePrice),
@@ -113,11 +124,45 @@ export class DatabaseSmartsheetService {
           galvanisedSteelFlatStripPrice: cleanFloat(record.galvanisedSteelFlatStripPrice),
           fillerPrice: cleanFloat(record.fillerPrice),
           lastSyncedAt: new Date(),
+        });
+
+        const buildUpdateData = () => {
+          const data = { lastSyncedAt: new Date() };
+          if (!isNullishForSync(record.enquiryDate)) data.enquiryDate = record.enquiryDate;
+          if (!isNullishForSync(record.partyName)) data.partyName = record.partyName;
+          if (!isNullishForSync(record.utility)) data.utility = record.utility;
+          if (!isNullishForSync(record.quotationNumber)) data.quotationNumber = record.quotationNumber;
+          if (!isNullishForSync(record.quotationDate)) data.quotationDate = record.quotationDate;
+          if (!isNullishForSync(record.accountHolder)) data.accountHolder = record.accountHolder;
+          if (!isNullishForSync(record.reverseAuctionApplicable)) data.reverseAuctionApplicable = record.reverseAuctionApplicable;
+          if (!isNullishForSync(record.tenderPurchase)) data.tenderPurchase = record.tenderPurchase;
+          if (!isNullishForSync(record.attachmentUrl)) data.attachmentUrl = record.attachmentUrl;
+          if (!isNullishForSync(record.proposedErpItemName)) data.proposedErpItemName = record.proposedErpItemName;
+          if (!isNullishForSync(record.proposedQty)) data.proposedQty = record.proposedQty;
+          if (!isNullishForSync(record.priceBasis)) data.priceBasis = record.priceBasis;
+          if (!isNullishForSync(record.contractNo)) data.contractNo = record.contractNo;
+          const ap = cleanFloat(record.aluminiumPrice);
+          if (ap !== null) data.aluminiumPrice = ap;
+          const aap = cleanFloat(record.aluminiumAlloyPrice);
+          if (aap !== null) data.aluminiumAlloyPrice = aap;
+          const ctp = cleanFloat(record.copperTapePrice);
+          if (ctp !== null) data.copperTapePrice = ctp;
+          const esp = cleanFloat(record.extrudedSemiconductivePrice);
+          if (esp !== null) data.extrudedSemiconductivePrice = esp;
+          const htp = cleanFloat(record.htXlpePrice);
+          if (htp !== null) data.htXlpePrice = htp;
+          const pvc = cleanFloat(record.pvcTypeSt2Price);
+          if (pvc !== null) data.pvcTypeSt2Price = pvc;
+          const gssp = cleanFloat(record.galvanisedSteelFlatStripPrice);
+          if (gssp !== null) data.galvanisedSteelFlatStripPrice = gssp;
+          const fp = cleanFloat(record.fillerPrice);
+          if (fp !== null) data.fillerPrice = fp;
+          return data;
         };
 
         if (!dbRecord) {
           try {
-            await prisma.smartsheetTender.create({ data });
+            await prisma.smartsheetTender.create({ data: buildCreateData() });
             insertedCount++;
           } catch (err) {
             console.error(`❌ CREATE FAILURE for Smartsheet tender: ${docketKey}`, err.message || err);
@@ -126,7 +171,7 @@ export class DatabaseSmartsheetService {
           try {
             await prisma.smartsheetTender.update({
               where: { id: dbRecord.id },
-              data,
+              data: buildUpdateData(),
             });
             updatedCount++;
           } catch (err) {
@@ -250,7 +295,7 @@ export class DatabaseSmartsheetService {
       const batch = validRecords.slice(i, i + BATCH_SIZE);
       const ops = batch.map(record => {
         const docketKey = record.docketNumber.trim();
-        const data = {
+        const commonData = {
           enquiryDate: record.enquiryDate || null,
           partyName: record.partyName || null,
           docketNumber: docketKey,
@@ -258,13 +303,13 @@ export class DatabaseSmartsheetService {
           quotationNumber: record.quotationNumber || null,
           quotationDate: record.quotationDate || null,
           accountHolder: record.accountHolder || null,
-          allocatedTo: record.allocatedTo || null,
           reverseAuctionApplicable: record.reverseAuctionApplicable || null,
           tenderPurchase: record.tenderPurchase || null,
           attachmentUrl: record.attachmentUrl || null,
           proposedErpItemName: record.proposedErpItemName || null,
           proposedQty: record.proposedQty || null,
           priceBasis: record.priceBasis || null,
+          contractNo: record.contractNo || null,
           aluminiumPrice: cleanFloat(record.aluminiumPrice),
           aluminiumAlloyPrice: cleanFloat(record.aluminiumAlloyPrice),
           copperTapePrice: cleanFloat(record.copperTapePrice),
@@ -275,10 +320,41 @@ export class DatabaseSmartsheetService {
           fillerPrice: cleanFloat(record.fillerPrice),
           lastSyncedAt: new Date(),
         };
+        const createData = { ...commonData };
+        const updateData = { lastSyncedAt: new Date() };
+        if (!isNullishForSync(record.enquiryDate)) updateData.enquiryDate = record.enquiryDate;
+        if (!isNullishForSync(record.partyName)) updateData.partyName = record.partyName;
+        if (!isNullishForSync(record.utility)) updateData.utility = record.utility;
+        if (!isNullishForSync(record.quotationNumber)) updateData.quotationNumber = record.quotationNumber;
+        if (!isNullishForSync(record.quotationDate)) updateData.quotationDate = record.quotationDate;
+        if (!isNullishForSync(record.accountHolder)) updateData.accountHolder = record.accountHolder;
+        if (!isNullishForSync(record.reverseAuctionApplicable)) updateData.reverseAuctionApplicable = record.reverseAuctionApplicable;
+        if (!isNullishForSync(record.tenderPurchase)) updateData.tenderPurchase = record.tenderPurchase;
+        if (!isNullishForSync(record.attachmentUrl)) updateData.attachmentUrl = record.attachmentUrl;
+        if (!isNullishForSync(record.proposedErpItemName)) updateData.proposedErpItemName = record.proposedErpItemName;
+        if (!isNullishForSync(record.proposedQty)) updateData.proposedQty = record.proposedQty;
+        if (!isNullishForSync(record.priceBasis)) updateData.priceBasis = record.priceBasis;
+        if (!isNullishForSync(record.contractNo)) updateData.contractNo = record.contractNo;
+        const ap = cleanFloat(record.aluminiumPrice);
+        if (ap !== null) updateData.aluminiumPrice = ap;
+        const aap = cleanFloat(record.aluminiumAlloyPrice);
+        if (aap !== null) updateData.aluminiumAlloyPrice = aap;
+        const ctp = cleanFloat(record.copperTapePrice);
+        if (ctp !== null) updateData.copperTapePrice = ctp;
+        const esp = cleanFloat(record.extrudedSemiconductivePrice);
+        if (esp !== null) updateData.extrudedSemiconductivePrice = esp;
+        const htp = cleanFloat(record.htXlpePrice);
+        if (htp !== null) updateData.htXlpePrice = htp;
+        const pvc = cleanFloat(record.pvcTypeSt2Price);
+        if (pvc !== null) updateData.pvcTypeSt2Price = pvc;
+        const gssp = cleanFloat(record.galvanisedSteelFlatStripPrice);
+        if (gssp !== null) updateData.galvanisedSteelFlatStripPrice = gssp;
+        const fp = cleanFloat(record.fillerPrice);
+        if (fp !== null) updateData.fillerPrice = fp;
         return { docketKey, partyName: record.partyName, promise: prisma.smartsheetTender.upsert({
           where: { docketNumber: docketKey },
-          create: data,
-          update: data,
+          create: createData,
+          update: updateData,
         }) };
       });
 
