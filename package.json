@@ -8,7 +8,8 @@
     "start": "next start --port 4321",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
-    "sync:costing": "node scripts/syncExternalCosting.mjs"
+    "sync:costing": "node scripts/syncExternalCosting.mjs",
+    "scan:costing-files": "node scripts/scanCostingFiles.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

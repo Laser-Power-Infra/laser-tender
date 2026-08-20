@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma";
+import { findCostingFileRecursive, extractNumericDocket, COST_PREFIX_STR } from "./costingFileFinder.mjs";
 
 const cleanFloat = (val) => {
   if (val === null || val === undefined || val === "") return null;
@@ -329,6 +330,80 @@ export class DatabaseSmartsheetService {
     } catch (err) {
       console.error("[DatabaseSmartsheetService] Failed to query Smartsheet tenders:", err);
       return [];
+    }
+  }
+
+  /**
+   * Scans the costing network folder (recursively) for each docket that does
+   * not yet have an attachment URL, and stores the found file as "COST|<path>".
+   */
+  static async scanAndUpdateCostingFiles(limit = 100) {
+    if (!prisma) {
+      return { success: false, reason: "Prisma client unavailable" };
+    }
+
+    try {
+      const records = await prisma.smartsheetTender.findMany({
+        where: {
+          attachmentUrl: null,
+        },
+      });
+
+      const total = records.length;
+
+      
+      const candidates = records.filter((r) => {
+        const url = (r.attachmentUrl || "").trim();
+        return !url || url === "-";
+      });
+
+      const scannedTotal = candidates.length;
+      const batch = candidates.slice(0, limit);
+
+      const scanned = batch.length;
+      let matched = 0;
+      const updates = [];
+
+      for (const record of batch) {
+        const docketNumber = (record.docketNumber || "").trim();
+        const numeric = extractNumericDocket(docketNumber);
+        if (!numeric) continue;
+
+        const filePath = findCostingFileRecursive(docketNumber);
+        if (!filePath) continue;
+
+        updates.push({
+          id: record.id,
+          docketNumber,
+          attachmentUrl: `${COST_PREFIX_STR}${filePath}`,
+        });
+        matched++;
+      }
+
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+        const batchUpdates = updates.slice(i, i + BATCH_SIZE);
+        const ops = batchUpdates.map((u) =>
+          prisma.smartsheetTender.update({
+            where: { id: u.id },
+            data: { attachmentUrl: u.attachmentUrl, lastSyncedAt: new Date() },
+          })
+        );
+        await prisma.$transaction(ops, { maxWait: 5000, timeout: 30000 });
+      }
+
+      console.log(`[DatabaseSmartsheetService] Costing file scan complete: ${matched}/${scanned} dockets matched (${scannedTotal - scanned} remaining).`);
+      return {
+        success: true,
+        scanned,
+        matched,
+        notFound: scanned - matched,
+        total,
+        remaining: Math.max(0, scannedTotal - scanned),
+      };
+    } catch (err) {
+      console.error("[DatabaseSmartsheetService] Costing file scan failed:", err);
+      return { success: false, error: err.message };
     }
   }
 }
