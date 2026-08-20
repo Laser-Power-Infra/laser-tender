@@ -10,6 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "sync:costing": "node scripts/syncExternalCosting.mjs",
+    "scan:costing-files": "node scripts/scanCostingFiles.mjs",
     "backfill:contracts": "node scripts/backfillContractFromXls.mjs",
     "backfill:contracts:dry": "node scripts/backfillContractFromXls.mjs --dry-run"
   },

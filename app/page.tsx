@@ -7,6 +7,7 @@ import {
   updateTenderStatus,
   updateTenderReverseAuction,
   batchUpdateAllocatedTo,
+  scanCostingFiles,
 } from "@/actions/tenders";
 
 type SortField = keyof SmartsheetTender;
@@ -34,7 +35,7 @@ const COLUMNS: ColDef[] = [
   { key: "tenderPurchase",      label: "Tender / Purchase",  width: 150 },
   { key: "proposedErpItemName", label: "Item Name",          width: 250 },
   { key: "proposedQty",         label: "Tender Qty",         width: 140 },
-  { key: "attachmentUrl",       label: "Attachment",         width: 130 },
+  { key: "attachmentUrl",       label: "Attachment",         width: 150 },
   { key: "priceBasis",          label: "Price Basis",        width: 130 },
   { key: "rawMaterials",        label: "Raw Materials",      width: 260 },
 ];
@@ -90,6 +91,10 @@ const TenderDashboardPage: React.FC = () => {
   const [search, setSearch]           = useState("");
   const [sortField, setSortField]     = useState<SortField>("enquiryDate");
   const [sortDir, setSortDir]         = useState<SortDir>("desc");
+  const [costingRefreshing, setCostingRefreshing] = useState(false);
+  const [costingSummary, setCostingSummary] = useState<{ matched: number; total: number } | null>(null);
+  const [scanningCosting, setScanningCosting] = useState(false);
+  const [scanSummary, setScanSummary] = useState<{ scanned: number; matched: number; notFound: number; total: number; remaining: number } | null>(null);
   const [page, setPage]           = useState(1);
   const [pageSize, setPageSize]   = useState(50);
 
@@ -722,6 +727,34 @@ const TenderDashboardPage: React.FC = () => {
     setPage(1);
   };
 
+  const handleRefresh = async () => { setPage(1); await refresh(); };
+
+  const handleRefreshCosting = async () => {
+    setCostingRefreshing(true);
+    setCostingSummary(null);
+    const summary = await refreshCosting();
+    if (summary) setCostingSummary(summary);
+    setCostingRefreshing(false);
+  };
+
+  const handleScanCostingFiles = async () => {
+    setScanningCosting(true);
+    setScanSummary(null);
+    try {
+      const json = await scanCostingFiles();
+      if (!json.success) {
+        console.error("Failed to scan costing files:", json.error);
+        return;
+      }
+      setScanSummary(json.scanSummary || null);
+      await refresh();
+    } catch (err) {
+      console.error("Failed to scan costing files:", err);
+    } finally {
+      setScanningCosting(false);
+    }
+  };
+
   const handleExportExcel = () => {
     const tableHeader = COLUMNS.map(c => `<th style="background-color:#0a2540;color:#ffffff;font-weight:bold;padding:8px;border:1px solid #ddd;">${c.label}</th>`).join("");
     const tableRows = sorted.map(rec => {
@@ -877,11 +910,41 @@ const TenderDashboardPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="tender-sidebar-footer">
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", textAlign: "center", padding: "8px 0" }}>
-            Data syncs automatically • 30s polling
-          </div>
-        </div>
+        {/* <div className="tender-sidebar-footer">
+          <button
+            className="tender-refresh-sidebar-btn"
+            onClick={handleRefresh}
+            disabled={loading}
+          >
+            {loading ? "🔄 Loading..." : "🔄 Refresh Data"}
+          </button>
+          <button
+            className="tender-refresh-sidebar-btn"
+            onClick={handleRefreshCosting}
+            disabled={loading || costingRefreshing}
+            style={{ marginTop: 8 }}
+          >
+            {costingRefreshing ? "📎 Fetching..." : "📎 Refresh Costing"}
+          </button>
+          <button
+            className="tender-refresh-sidebar-btn"
+            onClick={handleScanCostingFiles}
+            disabled={loading || scanningCosting}
+            style={{ marginTop: 8 }}
+          >
+            {scanningCosting ? "📁 Scanning..." : "📁 Scan Costing Files"}
+          </button>
+          {costingSummary && (
+            <div style={{ fontSize: 11, color: "#5f6368", marginTop: 4, textAlign: "center" }}>
+              Costing: {costingSummary.matched}/{costingSummary.total} records matched
+            </div>
+          )}
+          {scanSummary && (
+            <div style={{ fontSize: 11, color: "#5f6368", marginTop: 4, textAlign: "center" }}>
+              Costing Files: {scanSummary.matched}/{scanSummary.scanned} found · {scanSummary.remaining} remaining
+            </div>
+          )}
+        </div> */}
       </aside>
 
       {/* ── Main Workspace ──────────────────────────────────────────────── */}
@@ -1686,16 +1749,27 @@ const TenderDashboardPage: React.FC = () => {
                             {/* Attachment */}
                             <td style={{ textAlign: "center" }}>
                               {row.attachmentUrl ? (
-                                <button
-                                  className="table-attachment-btn"
-                                  onClick={() => {
-                                    window.open(row.attachmentUrl!, "_blank");
-                                  }}
-                                  title="View Costing Sheet"
-                                  style={{ padding: "4px 8px", background: "#e8f0fe", color: "#1a73e8", border: "1px solid #d2e3fc", borderRadius: "4px", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}
-                                >
-                                  📎 Costing
-                                </button>
+                                row.attachmentUrl.startsWith("COST|") ? (
+                                  <a
+                                    href={`/api/costing/download?docket=${encodeURIComponent(row.docketNumber || "")}`}
+                                    className="table-attachment-btn"
+                                    title="Download Costing File"
+                                    style={{ padding: "4px 8px", background: "#e8f0fe", color: "#1a73e8", border: "1px solid #d2e3fc", borderRadius: "4px", fontSize: "11px", fontWeight: 600, cursor: "pointer", textDecoration: "none", display: "inline-block" }}
+                                  >
+                                    ⬇️ Costing File
+                                  </a>
+                                ) : (
+                                  <button
+                                    className="table-attachment-btn"
+                                    onClick={() => {
+                                      window.open(row.attachmentUrl!, "_blank");
+                                    }}
+                                    title="View Costing Sheet"
+                                    style={{ padding: "4px 8px", background: "#e8f0fe", color: "#1a73e8", border: "1px solid #d2e3fc", borderRadius: "4px", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}
+                                  >
+                                    📎 Costing
+                                  </button>
+                                )
                               ) : (
                                 <span className="smartsheet-null-cell">—</span>
                               )}

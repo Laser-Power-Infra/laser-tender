@@ -8,6 +8,7 @@ export interface TenderActionResponse<T = unknown> {
   error?: string;
   summary?: { matched: number; total: number };
   updatedCount?: number;
+  scanSummary?: { scanned: number; matched: number; notFound: number; total: number; remaining: number };
 }
 
 export async function getSmartsheetTenders(): Promise<TenderActionResponse> {
@@ -20,6 +21,62 @@ export async function getSmartsheetTenders(): Promise<TenderActionResponse> {
       success: false,
       data: [],
       error: err instanceof Error ? err.message : "An unexpected server error occurred.",
+    };
+  }
+}
+
+export async function refreshCosting(): Promise<TenderActionResponse> {
+  try {
+    const result = await refreshCostingData();
+    return {
+      success: true,
+      data: result.data,
+      summary: { matched: result.matchedCount, total: result.totalCount },
+    };
+  } catch (err) {
+    console.error("[CostingRefresh] Error:", err);
+    return {
+      success: false,
+      data: [],
+      error: err instanceof Error ? err.message : "Failed to refresh costing data.",
+    };
+  }
+}
+
+export async function scanCostingFiles(): Promise<TenderActionResponse> {
+  try {
+    const result = (await DatabaseSmartsheetService.scanAndUpdateCostingFiles(
+      Number(process.env.COSTING_SCAN_LIMIT )
+    )) as {
+      success: boolean;
+      error?: string;
+      scanned: number;
+      matched: number;
+      notFound: number;
+      total: number;
+      remaining: number;
+    };
+    if (!result.success) {
+      return { success: false, data: [], error: result.error || "Failed to scan costing files." };
+    }
+    const data = await DatabaseSmartsheetService.getAllSmartsheetTenders();
+    return {
+      success: true,
+      data,
+      scanSummary: {
+        scanned: result.scanned,
+        matched: result.matched,
+        notFound: result.notFound,
+        total: result.total,
+        remaining: result.remaining,
+      },
+    };
+  } catch (err) {
+    console.error("[CostingFileScan] Error:", err);
+    return {
+      success: false,
+      data: [],
+      error: err instanceof Error ? err.message : "Failed to scan costing files.",
     };
   }
 }
