@@ -13,6 +13,9 @@ export interface SmartsheetTender {
   accountHolder: string | null;
   allocatedTo: string | null;
   status: string | null;
+  emailId: string | null;
+  emailSubjectLine: string | null;
+  contactNo: string | null;
   reverseAuctionApplicable: string | null;
   tenderPurchase: string | null;
   cvaValue?: string | null;
