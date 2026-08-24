@@ -9,6 +9,8 @@ export interface SmartsheetRecord {
   quotationDate: string | null;
   accountHolder: string | null;
   tenderPurchase: string | null;
+  emailId: string | null;
+  emailSubjectLine: string | null;
 }
 
 async function fetchSmartsheetData(): Promise<{
@@ -44,6 +46,8 @@ async function fetchSmartsheetData(): Promise<{
     quotationDate: "Quotation DateFORMAT(MM-DD-YY) (Dipankar)",
     accountHolder: "Account Holder",
     tenderPurchase: "Tender/ Purchase/Bugetary/ Laser Tender (Marketing",
+    emailId: "Enquiry fro Email Id (debosmita nath)",
+    emailSubjectLine: "email subject line (debosmita nath)",
   };
 
   const getCellValue = (cells: { columnId?: number; value?: unknown; displayValue?: unknown }[], columnId: number | undefined): string | null => {
@@ -67,6 +71,8 @@ async function fetchSmartsheetData(): Promise<{
       quotationDate: get("quotationDate"),
       accountHolder: get("accountHolder"),
       tenderPurchase: get("tenderPurchase"),
+      emailId: get("emailId"),
+      emailSubjectLine: get("emailSubjectLine"),
     };
   });
 

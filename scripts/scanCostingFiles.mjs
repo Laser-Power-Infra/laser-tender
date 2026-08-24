@@ -4,7 +4,8 @@
  *
  * Recursively searches the costing network folder (Z:\COSTING & INVOLVEMENT)
  * for each docket number that does not yet have an attachmentUrl, and stores
- * the matching Excel file as "COST|<full path>".
+ * the matching Excel file as an encrypted "ENC1." value wrapping
+ * "network|<relative-path>". Plain URLs (Drive/AppSheet) are never touched.
  *
  * Usage:
  *   node scripts/scanCostingFiles.mjs             # scan all missing dockets
@@ -13,7 +14,7 @@
  */
 import fs from "fs";
 import path from "path";
-import { findCostingFileRecursive, extractNumericDocket, COST_PREFIX_STR } from "../services/costingFileFinder.mjs";
+import { findCostingFileRecursive, extractNumericDocket, encryptStoredPath, buildStoredPath } from "../services/costingFileFinder.mjs";
 
 // ── Load .env ────────────────────────────────────────────────────────────────
 function loadEnv() {
@@ -107,7 +108,7 @@ async function main() {
       }
 
       if (filePath) {
-        updates.push({ docket, path: `${COST_PREFIX_STR}${filePath}` });
+        updates.push({ docket, path: encryptStoredPath(buildStoredPath(filePath)) });
         matched++;
       } else {
         notFound++;

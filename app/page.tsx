@@ -9,6 +9,9 @@ import {
   batchUpdateAllocatedTo,
   scanCostingFiles,
   refreshCosting,
+  pushCostingToQueue,
+  syncSmartsheetData,
+  updateTenderContactNo,
 } from "@/actions/tenders";
 
 type SortField = keyof SmartsheetTender;
@@ -31,6 +34,9 @@ const COLUMNS: ColDef[] = [
   { key: "accountHolder",   label: "Account Holder",     width: 180 },
   { key: "allocatedTo",     label: "Allocated To",       width: 180 },
   { key: "status",          label: "Status",             width: 180 },
+  { key: "emailId",         label: "Email Id",           width: 220 },
+  { key: "emailSubjectLine",label: "Email Subject Line", width: 280 },
+  { key: "contactNo",       label: "Contact No",         width: 160 },
   { key: "reverseAuctionApplicable", label: "Reverse Auction",  width: 150 },
   { key: "cvaValue",            label: "CVA Value",          width: 120 },
   { key: "tenderPurchase",      label: "Tender / Purchase",  width: 150 },
@@ -96,6 +102,8 @@ const TenderDashboardPage: React.FC = () => {
   const [costingSummary, setCostingSummary] = useState<{ matched: number; total: number } | null>(null);
   const [scanningCosting, setScanningCosting] = useState(false);
   const [scanSummary, setScanSummary] = useState<{ scanned: number; matched: number; notFound: number; total: number; remaining: number } | null>(null);
+  const [pushingQueue, setPushingQueue] = useState(false);
+  const [queueSummary, setQueueSummary] = useState<{ total: number; published: number; failed: number } | null>(null);
   const [page, setPage]           = useState(1);
   const [pageSize, setPageSize]   = useState(50);
 
@@ -114,6 +122,14 @@ const TenderDashboardPage: React.FC = () => {
   // Inline editing state for Reverse Auction
   const [savingReverseAuction, setSavingReverseAuction] = useState<Record<string, boolean>>({});
   const [reverseAuctionOverrides, setReverseAuctionOverrides] = useState<Record<string, string | null>>({});
+
+  // Inline editing state for Contact No
+  const [editingContactNo, setEditingContactNo] = useState<string | null>(null);
+  const [editContactValue, setEditContactValue] = useState("");
+  const [savingContact, setSavingContact] = useState<Record<string, boolean>>({});
+  const [contactNoOverrides, setContactNoOverrides] = useState<Record<string, string | null>>({});
+
+  const [syncing, setSyncing] = useState(false);
 
   // Column width states for manual expansion/resize
   const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
@@ -136,6 +152,9 @@ const TenderDashboardPage: React.FC = () => {
     accountHolder: "",
     allocatedTo: "",
     status: "",
+    emailId: "",
+    emailSubjectLine: "",
+    contactNo: "",
     reverseAuctionApplicable: "",
     tenderPurchase: "",
     proposedErpItemName: "",
@@ -313,6 +332,40 @@ const TenderDashboardPage: React.FC = () => {
     }
   };
 
+  const handleSaveContactNo = async (docketNumber: string) => {
+    if (savingContact[docketNumber]) return;
+    const newValue = editContactValue;
+    setSavingContact(prev => ({ ...prev, [docketNumber]: true }));
+    try {
+      const json = await updateTenderContactNo(docketNumber, newValue || null);
+      if (json.success) {
+        setContactNoOverrides(prev => ({ ...prev, [docketNumber]: newValue }));
+      }
+    } catch (err) {
+      console.error("Failed to update Contact No:", err);
+    } finally {
+      setSavingContact(prev => ({ ...prev, [docketNumber]: false }));
+      setEditingContactNo(null);
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const json = await syncSmartsheetData();
+      if (!json.success) {
+        console.error("Sync failed:", json.error);
+      }
+      // Polling will pick up new data within 30s; force reload to see immediately
+      window.location.reload();
+    } catch (err) {
+      console.error("Sync failed:", err);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleClearAllFilters = () => {
     setSearch("");
     setTenderPurchaseFilter("All");
@@ -340,6 +393,7 @@ const TenderDashboardPage: React.FC = () => {
     setShowAllocatedToDropdown(false);
     setQtyMin("");
     setQtyMax("");
+    setContactNoOverrides({});
     setColSearches({
       enquiryDate: "",
       partyName: "",
@@ -351,6 +405,9 @@ const TenderDashboardPage: React.FC = () => {
       accountHolder: "",
       allocatedTo: "",
       status: "",
+      emailId: "",
+      emailSubjectLine: "",
+      contactNo: "",
       reverseAuctionApplicable: "",
       tenderPurchase: "",
       proposedErpItemName: "",
@@ -755,6 +812,23 @@ const TenderDashboardPage: React.FC = () => {
     }
   };
 
+  const handlePushCostingToQueue = async () => {
+    setPushingQueue(true);
+    setQueueSummary(null);
+    try {
+      const json = await pushCostingToQueue();
+      if (!json.success) {
+        console.error("Failed to push costing to queue:", json.error);
+        return;
+      }
+      setQueueSummary(json.queueSummary || null);
+    } catch (err) {
+      console.error("Failed to push costing to queue:", err);
+    } finally {
+      setPushingQueue(false);
+    }
+  };
+
   const handleExportExcel = () => {
     const tableHeader = COLUMNS.map(c => `<th style="background-color:#0a2540;color:#ffffff;font-weight:bold;padding:8px;border:1px solid #ddd;">${c.label}</th>`).join("");
     const tableRows = sorted.map(rec => {
@@ -910,13 +984,13 @@ const TenderDashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* <div className="tender-sidebar-footer">
+        <div className="tender-sidebar-footer">
           <button
             className="tender-refresh-sidebar-btn"
             onClick={handleRefresh}
-            disabled={loading}
+            disabled={loading || syncing}
           >
-            {loading ? "🔄 Loading..." : "🔄 Refresh Data"}
+            {syncing ? "🔄 Syncing..." : "🔄 Refresh Data"}
           </button>
           <button
             className="tender-refresh-sidebar-btn"
@@ -934,6 +1008,14 @@ const TenderDashboardPage: React.FC = () => {
           >
             {scanningCosting ? "📁 Scanning..." : "📁 Scan Costing Files"}
           </button>
+          <button
+            className="tender-refresh-sidebar-btn"
+            onClick={handlePushCostingToQueue}
+            disabled={loading || pushingQueue}
+            style={{ marginTop: 8 }}
+          >
+            {pushingQueue ? "🚀 Pushing..." : "🚀 Push to Queue (Test)"}
+          </button>
           {costingSummary && (
             <div style={{ fontSize: 11, color: "#5f6368", marginTop: 4, textAlign: "center" }}>
               Costing: {costingSummary.matched}/{costingSummary.total} records matched
@@ -944,7 +1026,12 @@ const TenderDashboardPage: React.FC = () => {
               Costing Files: {scanSummary.matched}/{scanSummary.scanned} found · {scanSummary.remaining} remaining
             </div>
           )}
-        </div> */}
+          {queueSummary && (
+            <div style={{ fontSize: 11, color: "#5f6368", marginTop: 4, textAlign: "center" }}>
+              Queue: {queueSummary.published}/{queueSummary.total} logged (publish off)
+            </div>
+          )}
+        </div>
       </aside>
 
       {/* ── Main Workspace ──────────────────────────────────────────────── */}
@@ -1606,7 +1693,14 @@ const TenderDashboardPage: React.FC = () => {
                               )}
                             </td>
                             {/* Status */}
-                            <td>
+                            <td
+                              className="col-status"
+                              style={{
+                                width: colWidths["status"],
+                                minWidth: colWidths["status"],
+                                maxWidth: colWidths["status"],
+                              }}
+                            >
                               {editingStatus === row.docketNumber ? (
                                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                                   <input
@@ -1643,10 +1737,73 @@ const TenderDashboardPage: React.FC = () => {
                                   }}
                                   title="Click to edit"
                                 >
-                                  {row.docketNumber && statusOverrides.hasOwnProperty(row.docketNumber)
-                                    ? statusOverrides[row.docketNumber] ?? <span className="smartsheet-null-cell">—</span>
-                                    : row.status ?? <span className="smartsheet-null-cell">—</span>}
+                                  <span className="status-text status-scroll-wrap">
+                                    {row.docketNumber && statusOverrides.hasOwnProperty(row.docketNumber)
+                                      ? statusOverrides[row.docketNumber] ?? <span className="smartsheet-null-cell">—</span>
+                                      : row.status ?? <span className="smartsheet-null-cell">—</span>}
+                                  </span>
                                   {!savingStatus[row.docketNumber!] && (
+                                    <span className="allocated-edit-icon">✎</span>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                            {/* Email Id */}
+                            <td title={row.emailId ?? undefined} style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {row.emailId ?? <span className="smartsheet-null-cell">—</span>}
+                            </td>
+                            {/* Email Subject Line */}
+                            <td title={row.emailSubjectLine ?? undefined} style={{ whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "anywhere" }}>
+                              {row.emailSubjectLine ?? <span className="smartsheet-null-cell">—</span>}
+                            </td>
+                            {/* Contact No */}
+                            <td
+                              style={{
+                                width: colWidths["contactNo"],
+                                minWidth: colWidths["contactNo"],
+                                maxWidth: colWidths["contactNo"],
+                              }}
+                            >
+                              {editingContactNo === row.docketNumber ? (
+                                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                  <input
+                                    type="text"
+                                    className="allocated-edit-input"
+                                    value={editContactValue}
+                                    autoFocus
+                                    onChange={e => setEditContactValue(e.target.value)}
+                                    onBlur={() => row.docketNumber && handleSaveContactNo(row.docketNumber)}
+                                    onKeyDown={e => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        (e.target as HTMLInputElement).blur();
+                                      } else if (e.key === "Escape") {
+                                        setEditingContactNo(null);
+                                      }
+                                    }}
+                                  />
+                                  {savingContact[row.docketNumber!] && (
+                                    <span style={{ fontSize: 10, color: "#999" }}>...</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div
+                                  className="allocated-to-display"
+                                  onClick={() => {
+                                    if (!row.docketNumber || savingContact[row.docketNumber]) return;
+                                    setEditingContactNo(row.docketNumber);
+                                    setEditContactValue(
+                                      row.docketNumber && contactNoOverrides.hasOwnProperty(row.docketNumber)
+                                        ? contactNoOverrides[row.docketNumber] ?? ""
+                                        : row.contactNo ?? ""
+                                    );
+                                  }}
+                                  title="Click to edit"
+                                >
+                                  {row.docketNumber && contactNoOverrides.hasOwnProperty(row.docketNumber)
+                                    ? contactNoOverrides[row.docketNumber] ?? <span className="smartsheet-null-cell">—</span>
+                                    : row.contactNo ?? <span className="smartsheet-null-cell">—</span>}
+                                  {!savingContact[row.docketNumber!] && (
                                     <span className="allocated-edit-icon">✎</span>
                                   )}
                                 </div>
@@ -1749,27 +1906,16 @@ const TenderDashboardPage: React.FC = () => {
                             {/* Attachment */}
                             <td style={{ textAlign: "center" }}>
                               {row.attachmentUrl ? (
-                                row.attachmentUrl.startsWith("COST|") ? (
-                                  <a
-                                    href={`/api/costing/download?docket=${encodeURIComponent(row.docketNumber || "")}`}
-                                    className="table-attachment-btn"
-                                    title="Download Costing File"
-                                    style={{ padding: "4px 8px", background: "#e8f0fe", color: "#1a73e8", border: "1px solid #d2e3fc", borderRadius: "4px", fontSize: "11px", fontWeight: 600, cursor: "pointer", textDecoration: "none", display: "inline-block" }}
-                                  >
-                                    ⬇️ Costing File
-                                  </a>
-                                ) : (
-                                  <button
-                                    className="table-attachment-btn"
-                                    onClick={() => {
-                                      window.open(row.attachmentUrl!, "_blank");
-                                    }}
-                                    title="View Costing Sheet"
-                                    style={{ padding: "4px 8px", background: "#e8f0fe", color: "#1a73e8", border: "1px solid #d2e3fc", borderRadius: "4px", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}
-                                  >
-                                    📎 Costing
-                                  </button>
-                                )
+                                <a
+                                  href={`/api/costing/download?docket=${encodeURIComponent(row.docketNumber || "")}`}
+                                  className="table-attachment-btn"
+                                  title="Open / Download Costing File"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ padding: "4px 8px", background: "#e8f0fe", color: "#1a73e8", border: "1px solid #d2e3fc", borderRadius: "4px", fontSize: "11px", fontWeight: 600, cursor: "pointer", textDecoration: "none", display: "inline-block" }}
+                                >
+                                  📎 Costing
+                                </a>
                               ) : (
                                 <span className="smartsheet-null-cell">—</span>
                               )}

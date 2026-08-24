@@ -606,6 +606,51 @@
     text-overflow: clip;
   }
 
+  /* ── Status column ─ wrapped + scrollable, capped at 2x row height (~66px) ─ */
+  .smartsheet-data-table td.col-status {
+    white-space: normal !important;
+    overflow: hidden !important;
+    vertical-align: middle;
+    text-overflow: clip;
+  }
+
+  .status-scroll-wrap {
+    max-height: 66px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+
+  .status-scroll-wrap::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  .status-scroll-wrap::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+  }
+
+  .status-scroll-wrap::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+
+  .col-status .allocated-to-display {
+    white-space: normal;
+    align-items: flex-start;
+  }
+
+  .col-status .status-text {
+    flex: 1;
+    min-width: 0;
+    display: block;
+  }
+
   /* ── Column resize handle ─────────────────────────────────────────────────── */
   .col-resize-handle {
     @apply absolute bottom-0 right-[-4px] top-0 z-[25] w-2 cursor-col-resize bg-transparent transition-colors select-none;

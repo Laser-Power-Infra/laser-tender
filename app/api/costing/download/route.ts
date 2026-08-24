@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { readCostingFile, COST_PREFIX_STR } from "@/services/costingFileFinder.mjs";
+import { readCostingFile, decryptStoredPath, isPlainUrl } from "@/services/costingFileFinder.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -23,24 +23,34 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Database lookup failed" }, { status: 500 });
   }
 
-  const attachmentUrl = (record?.attachmentUrl || "").trim();
-  if (!attachmentUrl.startsWith(COST_PREFIX_STR)) {
-    return NextResponse.json({ error: "No costing file available for this docket" }, { status: 404 });
+  const stored = (record?.attachmentUrl || "").trim();
+  if (!stored) {
+    return NextResponse.json({ error: "No attachment available for this docket" }, { status: 404 });
   }
 
-  const file = readCostingFile(attachmentUrl);
-  if (!file) {
-    return NextResponse.json({ error: "Costing file could not be read from the network path" }, { status: 500 });
+  // Plain link (Drive / AppSheet / any http(s) URL) → redirect, no decrypt.
+  if (isPlainUrl(stored)) {
+    return NextResponse.redirect(stored, 302);
   }
 
-  const encodedFileName = encodeURIComponent(file.fileName);
-  return new NextResponse(file.buffer, {
-    status: 200,
-    headers: {
-      "Content-Type": file.mimeType,
-      "Content-Disposition": `attachment; filename*=UTF-8''${encodedFileName}`,
-      "Cache-Control": "no-store",
-      "Content-Length": String(file.buffer.byteLength),
-    },
-  });
+  // Encrypted network path → decrypt → resolve against the env root → stream.
+  const decrypted = decryptStoredPath(stored);
+  if (decrypted) {
+    const file = readCostingFile(decrypted);
+    if (!file) {
+      return NextResponse.json({ error: "Costing file could not be read from the network path" }, { status: 500 });
+    }
+    const encodedFileName = encodeURIComponent(file.fileName);
+    return new NextResponse(file.buffer, {
+      status: 200,
+      headers: {
+        "Content-Type": file.mimeType,
+        "Content-Disposition": `attachment; filename*=UTF-8''${encodedFileName}`,
+        "Cache-Control": "no-store",
+        "Content-Length": String(file.buffer.byteLength),
+      },
+    });
+  }
+
+  return NextResponse.json({ error: "No downloadable costing file for this docket" }, { status: 404 });
 }
