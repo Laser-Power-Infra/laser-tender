@@ -13,6 +13,8 @@ import {
   pushCostingToQueue,
   syncSmartsheetData,
   updateTenderContactNo,
+  updateTenderEmailId,
+  updateTenderEmailSubjectLine,
 } from "@/actions/tenders";
 
 type SortField = keyof SmartsheetTender;
@@ -129,6 +131,18 @@ const TenderDashboardPage: React.FC = () => {
   const [editContactValue, setEditContactValue] = useState("");
   const [savingContact, setSavingContact] = useState<Record<string, boolean>>({});
   const [contactNoOverrides, setContactNoOverrides] = useState<Record<string, string | null>>({});
+
+  // Inline editing state for Email Id
+  const [editingEmailId, setEditingEmailId] = useState<string | null>(null);
+  const [editEmailIdValue, setEditEmailIdValue] = useState("");
+  const [savingEmailId, setSavingEmailId] = useState<Record<string, boolean>>({});
+  const [emailIdOverrides, setEmailIdOverrides] = useState<Record<string, string | null>>({});
+
+  // Inline editing state for Email Subject Line
+  const [editingEmailSubject, setEditingEmailSubject] = useState<string | null>(null);
+  const [editEmailSubjectValue, setEditEmailSubjectValue] = useState("");
+  const [savingEmailSubject, setSavingEmailSubject] = useState<Record<string, boolean>>({});
+  const [emailSubjectOverrides, setEmailSubjectOverrides] = useState<Record<string, string | null>>({});
 
   const [syncing, setSyncing] = useState(false);
 
@@ -353,6 +367,36 @@ const TenderDashboardPage: React.FC = () => {
     }
   };
 
+  const handleSaveEmailId = async (docketNumber: string) => {
+    if (savingEmailId[docketNumber]) return;
+    const newValue = editEmailIdValue;
+    setSavingEmailId(prev => ({ ...prev, [docketNumber]: true }));
+    try {
+      const json = await updateTenderEmailId(docketNumber, newValue || null);
+      if (json.success) setEmailIdOverrides(prev => ({ ...prev, [docketNumber]: newValue }));
+    } catch (err) {
+      console.error("Failed to update Email Id:", err);
+    } finally {
+      setSavingEmailId(prev => ({ ...prev, [docketNumber]: false }));
+      setEditingEmailId(null);
+    }
+  };
+
+  const handleSaveEmailSubject = async (docketNumber: string) => {
+    if (savingEmailSubject[docketNumber]) return;
+    const newValue = editEmailSubjectValue;
+    setSavingEmailSubject(prev => ({ ...prev, [docketNumber]: true }));
+    try {
+      const json = await updateTenderEmailSubjectLine(docketNumber, newValue || null);
+      if (json.success) setEmailSubjectOverrides(prev => ({ ...prev, [docketNumber]: newValue }));
+    } catch (err) {
+      console.error("Failed to update Email Subject:", err);
+    } finally {
+      setSavingEmailSubject(prev => ({ ...prev, [docketNumber]: false }));
+      setEditingEmailSubject(null);
+    }
+  };
+
   const handleRefresh = async () => {
     if (syncing) return;
     setSyncing(true);
@@ -398,6 +442,8 @@ const TenderDashboardPage: React.FC = () => {
     setQtyMin("");
     setQtyMax("");
     setContactNoOverrides({});
+    setEmailIdOverrides({});
+    setEmailSubjectOverrides({});
     setColSearches({
       enquiryDate: "",
       partyName: "",
@@ -1754,12 +1800,117 @@ const TenderDashboardPage: React.FC = () => {
                               )}
                             </td>
                             {/* Email Id */}
-                            <td title={row.emailId ?? undefined} style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-                              {row.emailId ?? <span className="smartsheet-null-cell">—</span>}
+                            <td
+                              style={{
+                                width: colWidths["emailId"],
+                                minWidth: colWidths["emailId"],
+                                maxWidth: colWidths["emailId"],
+                              }}
+                            >
+                              {editingEmailId === row.docketNumber ? (
+                                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                  <input
+                                    type="text"
+                                    className="allocated-edit-input"
+                                    value={editEmailIdValue}
+                                    autoFocus
+                                    onChange={e => setEditEmailIdValue(e.target.value)}
+                                    onBlur={() => row.docketNumber && handleSaveEmailId(row.docketNumber)}
+                                    onKeyDown={e => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        (e.target as HTMLInputElement).blur();
+                                      } else if (e.key === "Escape") {
+                                        setEditingEmailId(null);
+                                      }
+                                    }}
+                                  />
+                                  {savingEmailId[row.docketNumber!] && (
+                                    <span style={{ fontSize: 10, color: "#999" }}>...</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div
+                                  className="allocated-to-display"
+                                  onClick={() => {
+                                    if (!row.docketNumber || savingEmailId[row.docketNumber]) return;
+                                    setEditingEmailId(row.docketNumber);
+                                    setEditEmailIdValue(
+                                      row.docketNumber && emailIdOverrides.hasOwnProperty(row.docketNumber)
+                                        ? emailIdOverrides[row.docketNumber] ?? ""
+                                        : row.emailId ?? ""
+                                    );
+                                  }}
+                                  title="Click to edit"
+                                >
+                                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
+                                    {row.docketNumber && emailIdOverrides.hasOwnProperty(row.docketNumber)
+                                      ? emailIdOverrides[row.docketNumber] ?? <span className="smartsheet-null-cell">—</span>
+                                      : row.emailId ?? <span className="smartsheet-null-cell">—</span>}
+                                  </span>
+                                  {!savingEmailId[row.docketNumber!] && (
+                                    <span className="allocated-edit-icon">✎</span>
+                                  )}
+                                </div>
+                              )}
                             </td>
                             {/* Email Subject Line */}
-                            <td title={row.emailSubjectLine ?? undefined} style={{ whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "anywhere" }}>
-                              {row.emailSubjectLine ?? <span className="smartsheet-null-cell">—</span>}
+                            <td
+                              style={{
+                                width: colWidths["emailSubjectLine"],
+                                minWidth: colWidths["emailSubjectLine"],
+                                maxWidth: colWidths["emailSubjectLine"],
+                                whiteSpace: "normal",
+                                wordBreak: "break-word",
+                                overflowWrap: "anywhere",
+                              }}
+                            >
+                              {editingEmailSubject === row.docketNumber ? (
+                                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                  <input
+                                    type="text"
+                                    className="allocated-edit-input"
+                                    value={editEmailSubjectValue}
+                                    autoFocus
+                                    onChange={e => setEditEmailSubjectValue(e.target.value)}
+                                    onBlur={() => row.docketNumber && handleSaveEmailSubject(row.docketNumber)}
+                                    onKeyDown={e => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        (e.target as HTMLInputElement).blur();
+                                      } else if (e.key === "Escape") {
+                                        setEditingEmailSubject(null);
+                                      }
+                                    }}
+                                  />
+                                  {savingEmailSubject[row.docketNumber!] && (
+                                    <span style={{ fontSize: 10, color: "#999" }}>...</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div
+                                  className="allocated-to-display"
+                                  onClick={() => {
+                                    if (!row.docketNumber || savingEmailSubject[row.docketNumber]) return;
+                                    setEditingEmailSubject(row.docketNumber);
+                                    setEditEmailSubjectValue(
+                                      row.docketNumber && emailSubjectOverrides.hasOwnProperty(row.docketNumber)
+                                        ? emailSubjectOverrides[row.docketNumber] ?? ""
+                                        : row.emailSubjectLine ?? ""
+                                    );
+                                  }}
+                                  title="Click to edit"
+                                >
+                                  <span style={{ flex: 1, minWidth: 0 }}>
+                                    {row.docketNumber && emailSubjectOverrides.hasOwnProperty(row.docketNumber)
+                                      ? emailSubjectOverrides[row.docketNumber] ?? <span className="smartsheet-null-cell">—</span>
+                                      : row.emailSubjectLine ?? <span className="smartsheet-null-cell">—</span>}
+                                  </span>
+                                  {!savingEmailSubject[row.docketNumber!] && (
+                                    <span className="allocated-edit-icon">✎</span>
+                                  )}
+                                </div>
+                              )}
                             </td>
                             {/* Contact No */}
                             <td
@@ -2027,9 +2178,21 @@ const TenderDashboardPage: React.FC = () => {
                 ? reverseAuctionOverrides[selectedTender.docketNumber]
                 : selectedTender.reverseAuctionApplicable ?? null
             }
+            effectiveEmailId={
+              selectedTender.docketNumber && emailIdOverrides.hasOwnProperty(selectedTender.docketNumber)
+                ? emailIdOverrides[selectedTender.docketNumber]
+                : selectedTender.emailId ?? null
+            }
+            effectiveEmailSubjectLine={
+              selectedTender.docketNumber && emailSubjectOverrides.hasOwnProperty(selectedTender.docketNumber)
+                ? emailSubjectOverrides[selectedTender.docketNumber]
+                : selectedTender.emailSubjectLine ?? null
+            }
             savingAllocated={selectedTender.docketNumber ? !!savingAllocated[selectedTender.docketNumber] : false}
             savingStatus={selectedTender.docketNumber ? !!savingStatus[selectedTender.docketNumber] : false}
             savingContact={selectedTender.docketNumber ? !!savingContact[selectedTender.docketNumber] : false}
+            savingEmailId={selectedTender.docketNumber ? !!savingEmailId[selectedTender.docketNumber] : false}
+            savingEmailSubject={selectedTender.docketNumber ? !!savingEmailSubject[selectedTender.docketNumber] : false}
             savingReverseAuction={selectedTender.docketNumber ? !!savingReverseAuction[selectedTender.docketNumber] : false}
             onSaveAllocatedTo={async val => {
               if (!selectedTender.docketNumber) return;
@@ -2081,6 +2244,30 @@ const TenderDashboardPage: React.FC = () => {
                 if (json.success) setContactNoOverrides(prev => ({ ...prev, [dn]: val }));
               } finally {
                 setSavingContact(prev => ({ ...prev, [dn]: false }));
+              }
+            }}
+            onSaveEmailId={async val => {
+              if (!selectedTender.docketNumber) return;
+              const dn = selectedTender.docketNumber;
+              if (savingEmailId[dn]) return;
+              setSavingEmailId(prev => ({ ...prev, [dn]: true }));
+              try {
+                const json = await updateTenderEmailId(dn, val || null);
+                if (json.success) setEmailIdOverrides(prev => ({ ...prev, [dn]: val }));
+              } finally {
+                setSavingEmailId(prev => ({ ...prev, [dn]: false }));
+              }
+            }}
+            onSaveEmailSubjectLine={async val => {
+              if (!selectedTender.docketNumber) return;
+              const dn = selectedTender.docketNumber;
+              if (savingEmailSubject[dn]) return;
+              setSavingEmailSubject(prev => ({ ...prev, [dn]: true }));
+              try {
+                const json = await updateTenderEmailSubjectLine(dn, val || null);
+                if (json.success) setEmailSubjectOverrides(prev => ({ ...prev, [dn]: val }));
+              } finally {
+                setSavingEmailSubject(prev => ({ ...prev, [dn]: false }));
               }
             }}
             onSaveReverseAuction={val => {

@@ -744,8 +744,9 @@
     top: 42px;
     right: 0;
     bottom: 0;
-    width: 40%;
+    width: 60%;
     min-width: 380px;
+    max-width: 960px;
     z-index: 50;
     transform: translateX(100%);
     transition: transform 260ms ease;

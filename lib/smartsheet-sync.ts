@@ -11,6 +11,7 @@ export interface SmartsheetRecord {
   tenderPurchase: string | null;
   emailId: string | null;
   emailSubjectLine: string | null;
+  contactNo: string | null;
 }
 
 async function fetchSmartsheetData(): Promise<{
@@ -46,8 +47,9 @@ async function fetchSmartsheetData(): Promise<{
     quotationDate: "Quotation DateFORMAT(MM-DD-YY) (Dipankar)",
     accountHolder: "Account Holder",
     tenderPurchase: "Tender/ Purchase/Bugetary/ Laser Tender (Marketing",
-    emailId: "Enquiry fro Email Id (debosmita nath)",
-    emailSubjectLine: "email subject line (debosmita nath)",
+    emailId: "Enquiry from Email id  (Debosmita Nath)",
+    emailSubjectLine: "Email Subject Line  (Debosmita Nath)",
+    contactNo: "Enquiry From Contact No.",
   };
 
   const getCellValue = (cells: { columnId?: number; value?: unknown; displayValue?: unknown }[], columnId: number | undefined): string | null => {
@@ -59,9 +61,14 @@ async function fetchSmartsheetData(): Promise<{
     return null;
   };
 
+  // Normalized lookup for resilience to spaces/casing
+  const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+  const columnIndexNorm = new Map<string, number>();
+  for (const [k, v] of columnIndex.entries()) columnIndexNorm.set(norm(k), v);
+
   const records: SmartsheetRecord[] = rows.map((row) => {
     const cells = row.cells || [];
-    const get = (field: string): string | null => getCellValue(cells, columnIndex.get(COLUMN_MAP[field]));
+    const get = (field: string): string | null => getCellValue(cells, columnIndexNorm.get(norm(COLUMN_MAP[field])));
     return {
       enquiryDate: get("enquiryDate"),
       partyName: get("partyName"),
@@ -73,6 +80,7 @@ async function fetchSmartsheetData(): Promise<{
       tenderPurchase: get("tenderPurchase"),
       emailId: get("emailId"),
       emailSubjectLine: get("emailSubjectLine"),
+      contactNo: get("contactNo"),
     };
   });
 

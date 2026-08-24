@@ -17,15 +17,21 @@ interface Props {
   effectiveAllocatedTo: string | null;
   effectiveStatus: string | null;
   effectiveContactNo: string | null;
+  effectiveEmailId: string | null;
+  effectiveEmailSubjectLine: string | null;
   effectiveReverseAuction: string | null;
   // draft handlers
   savingAllocated: boolean;
   savingStatus: boolean;
   savingContact: boolean;
+  savingEmailId: boolean;
+  savingEmailSubject: boolean;
   savingReverseAuction: boolean;
   onSaveAllocatedTo: (val: string) => void;
   onSaveStatus: (val: string) => void;
   onSaveContactNo: (val: string) => void;
+  onSaveEmailId: (val: string) => void;
+  onSaveEmailSubjectLine: (val: string) => void;
   onSaveReverseAuction: (val: string) => void;
 }
 
@@ -36,27 +42,37 @@ export default function TenderDetailSheet({
   effectiveAllocatedTo,
   effectiveStatus,
   effectiveContactNo,
+  effectiveEmailId,
+  effectiveEmailSubjectLine,
   effectiveReverseAuction,
   savingAllocated,
   savingStatus,
   savingContact,
+  savingEmailId,
+  savingEmailSubject,
   savingReverseAuction,
   onSaveAllocatedTo,
   onSaveStatus,
   onSaveContactNo,
+  onSaveEmailId,
+  onSaveEmailSubjectLine,
   onSaveReverseAuction,
 }: Props) {
   const [draftAllocated, setDraftAllocated] = useState("");
   const [draftStatus, setDraftStatus] = useState("");
   const [draftContact, setDraftContact] = useState("");
+  const [draftEmailId, setDraftEmailId] = useState("");
+  const [draftEmailSubject, setDraftEmailSubject] = useState("");
 
   useEffect(() => {
     if (tender) {
       setDraftAllocated(effectiveAllocatedTo ?? "");
       setDraftStatus(effectiveStatus ?? "");
       setDraftContact(effectiveContactNo ?? "");
+      setDraftEmailId(effectiveEmailId ?? "");
+      setDraftEmailSubject(effectiveEmailSubjectLine ?? "");
     }
-  }, [tender, effectiveAllocatedTo, effectiveStatus, effectiveContactNo]);
+  }, [tender, effectiveAllocatedTo, effectiveStatus, effectiveContactNo, effectiveEmailId, effectiveEmailSubjectLine]);
 
   useEffect(() => {
     if (!open) return;
@@ -163,6 +179,36 @@ export default function TenderDetailSheet({
                   if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
                   if (e.key === "Escape") { setDraftContact(effectiveContactNo ?? ""); (e.target as HTMLInputElement).blur(); }
                 }}
+                placeholder="—"
+              />
+            </label>
+
+            <label className="tender-detail-field">
+              <span className="tender-detail-label">Email Id {savingEmailId && <span style={{ fontWeight: 400, fontSize: 11, color: "#999" }}>Saving...</span>}</span>
+              <input
+                className="tender-detail-input"
+                value={draftEmailId}
+                onChange={e => setDraftEmailId(e.target.value)}
+                onBlur={() => onSaveEmailId(draftEmailId)}
+                onKeyDown={e => {
+                  if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
+                  if (e.key === "Escape") { setDraftEmailId(effectiveEmailId ?? ""); (e.target as HTMLInputElement).blur(); }
+                }}
+                placeholder="—"
+              />
+            </label>
+
+            <label className="tender-detail-field">
+              <span className="tender-detail-label">Email Subject Line {savingEmailSubject && <span style={{ fontWeight: 400, fontSize: 11, color: "#999" }}>Saving...</span>}</span>
+              <textarea
+                className="tender-detail-textarea"
+                value={draftEmailSubject}
+                onChange={e => setDraftEmailSubject(e.target.value)}
+                onBlur={() => onSaveEmailSubjectLine(draftEmailSubject)}
+                onKeyDown={e => {
+                  if (e.key === "Escape") { setDraftEmailSubject(effectiveEmailSubjectLine ?? ""); (e.target as HTMLTextAreaElement).blur(); }
+                }}
+                rows={3}
                 placeholder="—"
               />
             </label>

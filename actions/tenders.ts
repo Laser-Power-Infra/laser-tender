@@ -165,6 +165,32 @@ export async function updateTenderContactNo(
   }
 }
 
+export async function updateTenderEmailId(
+  docketNumber: string,
+  emailId: string | null
+): Promise<TenderActionResponse> {
+  try {
+    const result = await DatabaseSmartsheetService.updateSmartsheetTenderEmailId(docketNumber, emailId ?? null);
+    if (!result.success) return { success: false, error: result.error || "Record not found" };
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Unexpected error" };
+  }
+}
+
+export async function updateTenderEmailSubjectLine(
+  docketNumber: string,
+  emailSubjectLine: string | null
+): Promise<TenderActionResponse> {
+  try {
+    const result = await DatabaseSmartsheetService.updateSmartsheetTenderEmailSubjectLine(docketNumber, emailSubjectLine ?? null);
+    if (!result.success) return { success: false, error: result.error || "Record not found" };
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Unexpected error" };
+  }
+}
+
 export async function pushCostingToQueue(): Promise<TenderActionResponse> {
   try {
     const tenders = await DatabaseSmartsheetService.getAllSmartsheetTenders();

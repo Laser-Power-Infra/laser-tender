@@ -21,10 +21,10 @@ const isRecordModified = (sheet, db) => {
     // { name: "allocatedTo", type: "string" },
     // { name: "status", type: "string" },
     // { name: "contactNo", type: "string" },
+    // { name: "emailId", type: "string" },
+    // { name: "emailSubjectLine", type: "string" },
     { name: "reverseAuctionApplicable", type: "string" },
     { name: "tenderPurchase", type: "string" },
-    { name: "emailId", type: "string" },
-    { name: "emailSubjectLine", type: "string" },
     { name: "attachmentUrl", type: "string" },
     { name: "proposedErpItemName", type: "string" },
     { name: "proposedQty", type: "string" },
@@ -62,6 +62,11 @@ const isRecordModified = (sheet, db) => {
       if (v1 !== v2) return true;
     }
   }
+
+  // ContactNo / EmailId / EmailSubjectLine: fill nulls only — sheet fills DB only when DB is nullish (editable preserves local edits)
+  if (!isNullishForSync(sheet.contactNo) && isNullishForSync(db.contactNo)) return true;
+  if (!isNullishForSync(sheet.emailId) && isNullishForSync(db.emailId)) return true;
+  if (!isNullishForSync(sheet.emailSubjectLine) && isNullishForSync(db.emailSubjectLine)) return true;
 
   return false;
 };
@@ -148,8 +153,9 @@ export class DatabaseSmartsheetService {
           if (!isNullishForSync(record.proposedQty)) data.proposedQty = record.proposedQty;
           if (!isNullishForSync(record.priceBasis)) data.priceBasis = record.priceBasis;
           if (!isNullishForSync(record.contractNo)) data.contractNo = record.contractNo;
-          if (!isNullishForSync(record.emailId)) data.emailId = record.emailId;
-          if (!isNullishForSync(record.emailSubjectLine)) data.emailSubjectLine = record.emailSubjectLine;
+          if (!isNullishForSync(record.emailId) && isNullishForSync(dbRecord?.emailId)) data.emailId = record.emailId;
+          if (!isNullishForSync(record.emailSubjectLine) && isNullishForSync(dbRecord?.emailSubjectLine)) data.emailSubjectLine = record.emailSubjectLine;
+          if (!isNullishForSync(record.contactNo) && isNullishForSync(dbRecord?.contactNo)) data.contactNo = record.contactNo;
           const ap = cleanFloat(record.aluminiumPrice);
           if (ap !== null) data.aluminiumPrice = ap;
           const aap = cleanFloat(record.aluminiumAlloyPrice);
@@ -301,6 +307,48 @@ export class DatabaseSmartsheetService {
     }
   }
 
+  static async updateSmartsheetTenderEmailId(docketNumber, emailId) {
+    if (!prisma) {
+      return { success: false, error: "Prisma client unavailable" };
+    }
+    try {
+      const existing = await prisma.smartsheetTender.findUnique({
+        where: { docketNumber },
+      });
+      if (!existing) {
+        return { success: false, error: "Record not found" };
+      }
+      await prisma.smartsheetTender.update({
+        where: { docketNumber },
+        data: { emailId, lastSyncedAt: new Date() },
+      });
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  static async updateSmartsheetTenderEmailSubjectLine(docketNumber, emailSubjectLine) {
+    if (!prisma) {
+      return { success: false, error: "Prisma client unavailable" };
+    }
+    try {
+      const existing = await prisma.smartsheetTender.findUnique({
+        where: { docketNumber },
+      });
+      if (!existing) {
+        return { success: false, error: "Record not found" };
+      }
+      await prisma.smartsheetTender.update({
+        where: { docketNumber },
+        data: { emailSubjectLine, lastSyncedAt: new Date() },
+      });
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
   /**
    * Bulk upsert using batched transactions (much faster than individual create/update).
    */
@@ -320,6 +368,11 @@ export class DatabaseSmartsheetService {
     const insertedLog = [];
     const updatedLog = [];
     const MAX_LOG = 20;
+
+    // For Option A: contactNo/emailId/emailSubjectLine fill nulls only — need existing values map
+    const existingForEditable = await prisma.smartsheetTender.findMany({ select: { docketNumber: true, contactNo: true, emailId: true, emailSubjectLine: true } });
+    const existingEditableMap = new Map();
+    existingForEditable.forEach(item => { if (item.docketNumber) existingEditableMap.set(item.docketNumber.trim(), item); });
 
     for (let i = 0; i < validRecords.length; i += BATCH_SIZE) {
       const batch = validRecords.slice(i, i + BATCH_SIZE);
@@ -368,8 +421,10 @@ export class DatabaseSmartsheetService {
         if (!isNullishForSync(record.proposedQty)) updateData.proposedQty = record.proposedQty;
         if (!isNullishForSync(record.priceBasis)) updateData.priceBasis = record.priceBasis;
         if (!isNullishForSync(record.contractNo)) updateData.contractNo = record.contractNo;
-        if (!isNullishForSync(record.emailId)) updateData.emailId = record.emailId;
-        if (!isNullishForSync(record.emailSubjectLine)) updateData.emailSubjectLine = record.emailSubjectLine;
+        const existingEditable = existingEditableMap.get(docketKey);
+        if (!isNullishForSync(record.emailId) && isNullishForSync(existingEditable?.emailId)) updateData.emailId = record.emailId;
+        if (!isNullishForSync(record.emailSubjectLine) && isNullishForSync(existingEditable?.emailSubjectLine)) updateData.emailSubjectLine = record.emailSubjectLine;
+        if (!isNullishForSync(record.contactNo) && isNullishForSync(existingEditable?.contactNo)) updateData.contactNo = record.contactNo;
         const ap = cleanFloat(record.aluminiumPrice);
         if (ap !== null) updateData.aluminiumPrice = ap;
         const aap = cleanFloat(record.aluminiumAlloyPrice);
