@@ -3,9 +3,20 @@
 # ===========================
 
 $ContainerName = "postgres-prod"
+
 # $Database = "enquiry-quotation"
-$Database = "laser-tender-dashboard"
-# $Database = "testing"   
+# $NetworkBackupDir = "W:\enquiry-quotation-backup\"
+
+$Database = "laser-tender-dashboard-v2"
+$NetworkBackupDir = "W:\laser-tender-dashboard-backup\"
+
+# $Database = "gmd-quotation"
+# $NetworkBackupDir = "W:\gmd-dashboard-backup\"
+
+
+# $Database = "testing"  
+
+
 $User = "asmita"
 $Password = "asmita"
 
@@ -13,7 +24,8 @@ $Password = "asmita"
 $LocalBackupDir = "D:\PostgresBackups"
 
 # Network folder (change this)
-$NetworkBackupDir = "W:\laser-tender-dashboard-backup\"
+
+
 
 # Timestamp
 $Timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
