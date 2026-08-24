@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useSmartsheetTenders } from "@/hooks/useSmartsheetTenders";
 import { SmartsheetTender } from "@/types/smartsheetTender";
+import TenderDetailSheet from "@/components/TenderDetailSheet";
 import {
   updateTenderAllocatedTo,
   updateTenderStatus,
@@ -130,6 +131,9 @@ const TenderDashboardPage: React.FC = () => {
   const [contactNoOverrides, setContactNoOverrides] = useState<Record<string, string | null>>({});
 
   const [syncing, setSyncing] = useState(false);
+
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [selectedTender, setSelectedTender] = useState<SmartsheetTender | null>(null);
 
   // Column width states for manual expansion/resize
   const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
@@ -982,7 +986,7 @@ const TenderDashboardPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="tender-sidebar-footer">
+        {/* <div className="tender-sidebar-footer">
           <button
             className="tender-refresh-sidebar-btn"
             onClick={handleRefresh}
@@ -996,7 +1000,7 @@ const TenderDashboardPage: React.FC = () => {
             disabled={loading || costingRefreshing}
             style={{ marginTop: 8 }}
           >
-            {costingRefreshing ? "📎 Fetching..." : "📎 Refresh Costing"}
+            {costingRefreshing ? "📎 Fetching..." : "📎 Costing from sheet"}
           </button>
           <button
             className="tender-refresh-sidebar-btn"
@@ -1029,7 +1033,7 @@ const TenderDashboardPage: React.FC = () => {
               Queue: {queueSummary.published}/{queueSummary.total} logged (publish off)
             </div>
           )}
-        </div>
+        </div> */}
       </aside>
 
       {/* ── Main Workspace ──────────────────────────────────────────────── */}
@@ -1591,8 +1595,11 @@ const TenderDashboardPage: React.FC = () => {
                                 left: "0px",
                                 width: colWidths["enquiryDate"],
                                 minWidth: colWidths["enquiryDate"],
-                                maxWidth: colWidths["enquiryDate"]
+                                maxWidth: colWidths["enquiryDate"],
+                                cursor: "pointer"
                               }}
+                              onClick={() => { setSelectedTender(row); setSheetOpen(true); }}
+                              title="Click to view details"
                             >
                               {row.enquiryDate
                                 ? <span className="enquiry-date-badge">{formatDate(row.enquiryDate)}</span>
@@ -1993,6 +2000,95 @@ const TenderDashboardPage: React.FC = () => {
             </div>
           )}
         </main>
+
+        {/* Detail Sheet */}
+        {selectedTender && (
+          <TenderDetailSheet
+            open={sheetOpen}
+            tender={selectedTender}
+            onClose={() => setSheetOpen(false)}
+            effectiveAllocatedTo={
+              selectedTender.docketNumber && allocatedToOverrides.hasOwnProperty(selectedTender.docketNumber)
+                ? allocatedToOverrides[selectedTender.docketNumber]
+                : selectedTender.allocatedTo
+            }
+            effectiveStatus={
+              selectedTender.docketNumber && statusOverrides.hasOwnProperty(selectedTender.docketNumber)
+                ? statusOverrides[selectedTender.docketNumber]
+                : selectedTender.status
+            }
+            effectiveContactNo={
+              selectedTender.docketNumber && contactNoOverrides.hasOwnProperty(selectedTender.docketNumber)
+                ? contactNoOverrides[selectedTender.docketNumber]
+                : selectedTender.contactNo ?? null
+            }
+            effectiveReverseAuction={
+              selectedTender.docketNumber && reverseAuctionOverrides.hasOwnProperty(selectedTender.docketNumber)
+                ? reverseAuctionOverrides[selectedTender.docketNumber]
+                : selectedTender.reverseAuctionApplicable ?? null
+            }
+            savingAllocated={selectedTender.docketNumber ? !!savingAllocated[selectedTender.docketNumber] : false}
+            savingStatus={selectedTender.docketNumber ? !!savingStatus[selectedTender.docketNumber] : false}
+            savingContact={selectedTender.docketNumber ? !!savingContact[selectedTender.docketNumber] : false}
+            savingReverseAuction={selectedTender.docketNumber ? !!savingReverseAuction[selectedTender.docketNumber] : false}
+            onSaveAllocatedTo={async val => {
+              if (!selectedTender.docketNumber) return;
+              const dn = selectedTender.docketNumber;
+              if (savingAllocated[dn]) return;
+              setSavingAllocated(prev => ({ ...prev, [dn]: true }));
+              try {
+                const json = await updateTenderAllocatedTo(dn, val || null);
+                if (json.success) {
+                  setAllocatedToOverrides(prev => ({ ...prev, [dn]: val }));
+                  const currentRow = data.find(r => r.docketNumber === dn);
+                  const partyName = currentRow?.partyName;
+                  if (partyName) {
+                    const samePartyRows = data.filter(r => r.partyName === partyName && r.docketNumber !== dn);
+                    if (samePartyRows.length > 0) {
+                      const batchDocketNumbers = samePartyRows.map(r => r.docketNumber!);
+                      setAllocatedToOverrides(prev => {
+                        const next = { ...prev };
+                        batchDocketNumbers.forEach(d => { next[d] = val; });
+                        return next;
+                      });
+                      batchUpdateAllocatedTo(batchDocketNumbers, val || null).catch(err => console.error("Batch auto-fill failed:", err));
+                    }
+                  }
+                }
+              } finally {
+                setSavingAllocated(prev => ({ ...prev, [dn]: false }));
+              }
+            }}
+            onSaveStatus={async val => {
+              if (!selectedTender.docketNumber) return;
+              const dn = selectedTender.docketNumber;
+              if (savingStatus[dn]) return;
+              setSavingStatus(prev => ({ ...prev, [dn]: true }));
+              try {
+                const json = await updateTenderStatus(dn, val || null);
+                if (json.success) setStatusOverrides(prev => ({ ...prev, [dn]: val }));
+              } finally {
+                setSavingStatus(prev => ({ ...prev, [dn]: false }));
+              }
+            }}
+            onSaveContactNo={async val => {
+              if (!selectedTender.docketNumber) return;
+              const dn = selectedTender.docketNumber;
+              if (savingContact[dn]) return;
+              setSavingContact(prev => ({ ...prev, [dn]: true }));
+              try {
+                const json = await updateTenderContactNo(dn, val || null);
+                if (json.success) setContactNoOverrides(prev => ({ ...prev, [dn]: val }));
+              } finally {
+                setSavingContact(prev => ({ ...prev, [dn]: false }));
+              }
+            }}
+            onSaveReverseAuction={val => {
+              if (!selectedTender.docketNumber) return;
+              handleSaveReverseAuction(selectedTender.docketNumber!, val);
+            }}
+          />
+        )}
 
         {/* Footer status bar */}
         <footer className="tender-status-bar">

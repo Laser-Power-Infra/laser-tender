@@ -42,7 +42,7 @@ export const useSmartsheetTenders = (): UseSmartsheetTendersResult => {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(() => fetchData(), 30_000);
+    const interval = setInterval(() => fetchData(), 60_000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
