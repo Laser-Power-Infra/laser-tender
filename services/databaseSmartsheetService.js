@@ -1,5 +1,5 @@
 import { prisma } from "../lib/prisma";
-import { findCostingFileRecursive, extractNumericDocket, COST_PREFIX_STR } from "./costingFileFinder.mjs";
+import { findCostingFileRecursive, extractNumericDocket, encryptStoredPath, buildStoredPath } from "./costingFileFinder.mjs";
 
 const cleanFloat = (val) => {
   if (val === null || val === undefined || val === "") return null;
@@ -20,8 +20,11 @@ const isRecordModified = (sheet, db) => {
     { name: "accountHolder", type: "string" },
     // { name: "allocatedTo", type: "string" },
     // { name: "status", type: "string" },
+    // { name: "contactNo", type: "string" },
     { name: "reverseAuctionApplicable", type: "string" },
     { name: "tenderPurchase", type: "string" },
+    { name: "emailId", type: "string" },
+    { name: "emailSubjectLine", type: "string" },
     { name: "attachmentUrl", type: "string" },
     { name: "proposedErpItemName", type: "string" },
     { name: "proposedQty", type: "string" },
@@ -116,6 +119,9 @@ export class DatabaseSmartsheetService {
           proposedQty: record.proposedQty || null,
           priceBasis: record.priceBasis || null,
           contractNo: record.contractNo || null,
+          emailId: record.emailId || null,
+          emailSubjectLine: record.emailSubjectLine || null,
+          contactNo: record.contactNo || null,
           aluminiumPrice: cleanFloat(record.aluminiumPrice),
           aluminiumAlloyPrice: cleanFloat(record.aluminiumAlloyPrice),
           copperTapePrice: cleanFloat(record.copperTapePrice),
@@ -142,6 +148,8 @@ export class DatabaseSmartsheetService {
           if (!isNullishForSync(record.proposedQty)) data.proposedQty = record.proposedQty;
           if (!isNullishForSync(record.priceBasis)) data.priceBasis = record.priceBasis;
           if (!isNullishForSync(record.contractNo)) data.contractNo = record.contractNo;
+          if (!isNullishForSync(record.emailId)) data.emailId = record.emailId;
+          if (!isNullishForSync(record.emailSubjectLine)) data.emailSubjectLine = record.emailSubjectLine;
           const ap = cleanFloat(record.aluminiumPrice);
           if (ap !== null) data.aluminiumPrice = ap;
           const aap = cleanFloat(record.aluminiumAlloyPrice);
@@ -272,6 +280,27 @@ export class DatabaseSmartsheetService {
     }
   }
 
+  static async updateSmartsheetTenderContactNo(docketNumber, contactNo) {
+    if (!prisma) {
+      return { success: false, error: "Prisma client unavailable" };
+    }
+    try {
+      const existing = await prisma.smartsheetTender.findUnique({
+        where: { docketNumber },
+      });
+      if (!existing) {
+        return { success: false, error: "Record not found" };
+      }
+      await prisma.smartsheetTender.update({
+        where: { docketNumber },
+        data: { contactNo, lastSyncedAt: new Date() },
+      });
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
   /**
    * Bulk upsert using batched transactions (much faster than individual create/update).
    */
@@ -311,6 +340,9 @@ export class DatabaseSmartsheetService {
           proposedQty: record.proposedQty || null,
           priceBasis: record.priceBasis || null,
           contractNo: record.contractNo || null,
+          emailId: record.emailId || null,
+          emailSubjectLine: record.emailSubjectLine || null,
+          contactNo: record.contactNo || null,
           aluminiumPrice: cleanFloat(record.aluminiumPrice),
           aluminiumAlloyPrice: cleanFloat(record.aluminiumAlloyPrice),
           copperTapePrice: cleanFloat(record.copperTapePrice),
@@ -336,6 +368,8 @@ export class DatabaseSmartsheetService {
         if (!isNullishForSync(record.proposedQty)) updateData.proposedQty = record.proposedQty;
         if (!isNullishForSync(record.priceBasis)) updateData.priceBasis = record.priceBasis;
         if (!isNullishForSync(record.contractNo)) updateData.contractNo = record.contractNo;
+        if (!isNullishForSync(record.emailId)) updateData.emailId = record.emailId;
+        if (!isNullishForSync(record.emailSubjectLine)) updateData.emailSubjectLine = record.emailSubjectLine;
         const ap = cleanFloat(record.aluminiumPrice);
         if (ap !== null) updateData.aluminiumPrice = ap;
         const aap = cleanFloat(record.aluminiumAlloyPrice);
@@ -408,8 +442,32 @@ export class DatabaseSmartsheetService {
   }
 
   /**
+   * Updates costing fields for a single tender by docketNumber (update-only).
+   * Returns { success, found } — found=false when the docket row does not exist.
+   */
+  static async updateTenderCostingFields(docketNumber, fields) {
+    if (!prisma) {
+      return { success: false, found: false, error: "Prisma client unavailable" };
+    }
+    try {
+      await prisma.smartsheetTender.update({
+        where: { docketNumber },
+        data: { ...fields, lastSyncedAt: new Date() },
+      });
+      return { success: true, found: true };
+    } catch (err) {
+      // P2025 = record not found
+      if (err && err.code === "P2025") {
+        return { success: false, found: false, error: "Record not found" };
+      }
+      return { success: false, found: false, error: err.message };
+    }
+  }
+
+  /**
    * Scans the costing network folder (recursively) for each docket that does
-   * not yet have an attachment URL, and stores the found file as "COST|<path>".
+   * not yet have an attachment URL, and stores the found file as an encrypted
+   * "ENC1." value wrapping "network|<relative-path>". Plain URLs are untouched.
    */
   static async scanAndUpdateCostingFiles(limit = 100) {
     if (!prisma) {
@@ -443,13 +501,13 @@ export class DatabaseSmartsheetService {
         const numeric = extractNumericDocket(docketNumber);
         if (!numeric) continue;
 
-        const filePath = findCostingFileRecursive(docketNumber);
-        if (!filePath) continue;
+        const relativePath = findCostingFileRecursive(docketNumber);
+        if (!relativePath) continue;
 
         updates.push({
           id: record.id,
           docketNumber,
-          attachmentUrl: `${COST_PREFIX_STR}${filePath}`,
+          attachmentUrl: encryptStoredPath(buildStoredPath(relativePath)),
         });
         matched++;
       }

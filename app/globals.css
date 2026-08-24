@@ -606,6 +606,51 @@
     text-overflow: clip;
   }
 
+  /* ── Status column ─ wrapped + scrollable, capped at 2x row height (~66px) ─ */
+  .smartsheet-data-table td.col-status {
+    white-space: normal !important;
+    overflow: hidden !important;
+    vertical-align: middle;
+    text-overflow: clip;
+  }
+
+  .status-scroll-wrap {
+    max-height: 66px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+
+  .status-scroll-wrap::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  .status-scroll-wrap::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+  }
+
+  .status-scroll-wrap::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+
+  .col-status .allocated-to-display {
+    white-space: normal;
+    align-items: flex-start;
+  }
+
+  .col-status .status-text {
+    flex: 1;
+    min-width: 0;
+    display: block;
+  }
+
   /* ── Column resize handle ─────────────────────────────────────────────────── */
   .col-resize-handle {
     @apply absolute bottom-0 right-[-4px] top-0 z-[25] w-2 cursor-col-resize bg-transparent transition-colors select-none;
@@ -681,5 +726,110 @@
 
   .ra-inactive:hover {
     @apply bg-[#e8eaed];
+  }
+
+  /* ── Tender Detail Sheet (right slide-over) ──────────────────────────────── */
+  .tender-detail-overlay {
+    @apply fixed inset-0 bg-black/35 opacity-0 pointer-events-none transition-opacity;
+    z-index: 40;
+    backdrop-filter: blur(1px);
+  }
+
+  .tender-detail-overlay.open {
+    @apply opacity-100 pointer-events-auto;
+  }
+
+  .tender-detail-sheet {
+    @apply fixed flex flex-col overflow-hidden bg-white border-l border-line;
+    top: 42px;
+    right: 0;
+    bottom: 0;
+    width: 40%;
+    min-width: 380px;
+    z-index: 50;
+    transform: translateX(100%);
+    transition: transform 260ms ease;
+    box-shadow: -8px 0 24px rgba(10, 37, 64, 0.12);
+  }
+
+  .tender-detail-sheet.open {
+    transform: translateX(0);
+  }
+
+  .tender-detail-header {
+    @apply flex items-start justify-between gap-4 px-6 py-4 border-b border-line bg-[#f4f6f8] shrink-0;
+  }
+
+  .tender-detail-close {
+    @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white border border-line text-[#5f6368] cursor-pointer transition-colors;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .tender-detail-close:hover {
+    @apply bg-[#e1e6eb] text-navy;
+  }
+
+  .tender-detail-body {
+    @apply flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-6;
+  }
+
+  .tender-detail-section {
+    @apply flex flex-col gap-3 rounded-lg border border-line bg-[#f8fafc] p-4;
+  }
+
+  .tender-detail-section-title {
+    @apply text-[11px] font-extrabold uppercase text-navy;
+    letter-spacing: 0.6px;
+  }
+
+  .tender-detail-field {
+    @apply flex flex-col gap-1.5;
+  }
+
+  .tender-detail-label {
+    @apply text-[11px] font-bold text-[#5f6368] uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  .tender-detail-input {
+    @apply w-full rounded-md border border-[#dcdcdc] bg-white px-3 py-2 text-[13px] text-navy outline-none transition-colors;
+  }
+
+  .tender-detail-input:focus {
+    @apply border-brand;
+    box-shadow: 0 0 0 3px rgba(0, 112, 243, 0.12);
+  }
+
+  .tender-detail-textarea {
+    @apply w-full rounded-md border border-[#dcdcdc] bg-white px-3 py-2 text-[13px] text-navy outline-none resize-y transition-colors;
+    min-height: 72px;
+  }
+
+  .tender-detail-textarea:focus {
+    @apply border-brand;
+    box-shadow: 0 0 0 3px rgba(0, 112, 243, 0.12);
+  }
+
+  .tender-detail-grid {
+    @apply grid gap-3;
+    grid-template-columns: 1fr;
+  }
+
+  .tender-detail-item {
+    @apply flex flex-col gap-1 rounded-md bg-white border border-line px-3 py-2.5;
+  }
+
+  .tender-detail-k {
+    @apply text-[10px] font-bold uppercase text-[#8fa0b5];
+    letter-spacing: 0.5px;
+  }
+
+  .tender-detail-v {
+    @apply text-[13px] text-[#202124] leading-snug;
+  }
+
+  .tender-detail-footer {
+    @apply flex justify-end gap-2 px-6 py-3 border-t border-line bg-white shrink-0;
   }
 }

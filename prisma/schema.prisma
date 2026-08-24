@@ -37,6 +37,9 @@ model SmartsheetTender {
   galvanisedSteelFlatStripPrice Float?
   fillerPrice                   Float?
   contractNo                    String?
+  emailId                       String?
+  emailSubjectLine              String?
+  contactNo                     String?
   lastSyncedAt                  DateTime @default(now())
 }
 
