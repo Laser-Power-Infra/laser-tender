@@ -47,8 +47,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |
-            ghcr.io/${{ steps.repo_owner.outputs.owner }}/bom:latest
-            ghcr.io/${{ steps.repo_owner.outputs.owner }}/bom:${{ steps.vars.outputs.short_sha }}
+            ghcr.io/${{ steps.repo_owner.outputs.owner }}/laser-tender:latest
+            ghcr.io/${{ steps.repo_owner.outputs.owner }}/laser-tender:${{ steps.vars.outputs.short_sha }}
 
   deploy:
     name: Deploy to Server
