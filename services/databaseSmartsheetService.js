@@ -349,6 +349,34 @@ export class DatabaseSmartsheetService {
     }
   }
 
+  static async updateSmartsheetTenderLostStillScope(docketNumber, value) {
+    if (!prisma) {
+      return { success: false, error: "Prisma client unavailable" };
+    }
+    try {
+      const existing = await prisma.smartsheetTender.findUnique({
+        where: { docketNumber },
+      });
+      if (!existing) {
+        return { success: false, error: "Record not found" };
+      }
+      // Guard: if contractNo present, this column is derived as Awarded and should not be manually changed
+      // But allow clearing? UI will block Awarded rows; this is extra safety — still allow updates if caller insists
+      const normalized = value === null || value === undefined || String(value).trim() === "" ? null : String(value).trim();
+      // Only allow Lost / Still Scope / null
+      if (normalized !== null && normalized !== "Lost" && normalized !== "Still Scope") {
+        return { success: false, error: "Invalid value. Allowed: Lost, Still Scope" };
+      }
+      await prisma.smartsheetTender.update({
+        where: { docketNumber },
+        data: { LostStillScope: normalized, lastSyncedAt: new Date() },
+      });
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
   /**
    * Bulk upsert using batched transactions (much faster than individual create/update).
    */

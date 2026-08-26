@@ -20,6 +20,7 @@ interface Props {
   effectiveEmailId: string | null;
   effectiveEmailSubjectLine: string | null;
   effectiveReverseAuction: string | null;
+  effectiveLostStillScope: string;
   // draft handlers
   savingAllocated: boolean;
   savingStatus: boolean;
@@ -27,12 +28,14 @@ interface Props {
   savingEmailId: boolean;
   savingEmailSubject: boolean;
   savingReverseAuction: boolean;
+  savingLostStillScope: boolean;
   onSaveAllocatedTo: (val: string) => void;
   onSaveStatus: (val: string) => void;
   onSaveContactNo: (val: string) => void;
   onSaveEmailId: (val: string) => void;
   onSaveEmailSubjectLine: (val: string) => void;
   onSaveReverseAuction: (val: string) => void;
+  onSaveLostStillScope: (val: string | null) => void;
 }
 
 export default function TenderDetailSheet({
@@ -45,18 +48,21 @@ export default function TenderDetailSheet({
   effectiveEmailId,
   effectiveEmailSubjectLine,
   effectiveReverseAuction,
+  effectiveLostStillScope,
   savingAllocated,
   savingStatus,
   savingContact,
   savingEmailId,
   savingEmailSubject,
   savingReverseAuction,
+  savingLostStillScope,
   onSaveAllocatedTo,
   onSaveStatus,
   onSaveContactNo,
   onSaveEmailId,
   onSaveEmailSubjectLine,
   onSaveReverseAuction,
+  onSaveLostStillScope,
 }: Props) {
   const [draftAllocated, setDraftAllocated] = useState("");
   const [draftStatus, setDraftStatus] = useState("");
@@ -227,6 +233,29 @@ export default function TenderDetailSheet({
                   onClick={() => onSaveReverseAuction("no")}
                 >No</button>
               </div>
+            </div>
+
+            <div className="tender-detail-field">
+              <span className="tender-detail-label">Lost / Still Scope {savingLostStillScope && <span style={{ fontWeight: 400, fontSize: 11, color: "#999" }}>Saving...</span>}</span>
+              {tender.contractNo && tender.contractNo.trim() !== "" ? (
+                <div>
+                  <span className="purchase-type-badge purchase" style={{ background: "#e6f4ea", color: "#137333", borderColor: "#b7e1c0" }}>Awarded</span>
+                  <div style={{ fontSize: 11, color: "#5f6368", marginTop: 4 }}>Contract exists — status is Awarded</div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    className={`ra-toggle-btn ${effectiveLostStillScope === "Lost" ? "ra-no" : "ra-inactive"}`}
+                    disabled={savingLostStillScope}
+                    onClick={() => onSaveLostStillScope("Lost")}
+                  >Lost</button>
+                  <button
+                    className={`ra-toggle-btn ${effectiveLostStillScope === "Still Scope" ? "ra-yes" : "ra-inactive"}`}
+                    disabled={savingLostStillScope}
+                    onClick={() => onSaveLostStillScope("Still Scope")}
+                  >Still Scope</button>
+                </div>
+              )}
             </div>
           </div>
 

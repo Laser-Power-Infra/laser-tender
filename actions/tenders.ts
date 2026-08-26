@@ -191,6 +191,19 @@ export async function updateTenderEmailSubjectLine(
   }
 }
 
+export async function updateTenderLostStillScope(
+  docketNumber: string,
+  value: string | null
+): Promise<TenderActionResponse> {
+  try {
+    const result = await DatabaseSmartsheetService.updateSmartsheetTenderLostStillScope(docketNumber, value ?? null);
+    if (!result.success) return { success: false, error: result.error || "Record not found" };
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Unexpected error" };
+  }
+}
+
 export async function pushCostingToQueue(opts?: { docketNumbers?: string[]; testMode?: boolean }): Promise<TenderActionResponse> {
   try {
     const tenders = await DatabaseSmartsheetService.getAllSmartsheetTenders();

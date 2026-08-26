@@ -20,6 +20,7 @@ export interface SmartsheetTender {
   tenderPurchase: string | null;
   cvaValue?: string | null;
   contractNo?: string | null;
+  LostStillScope?: string | null;
   
   // Enriched costing details from joined Excel
   attachmentUrl?: string | null;

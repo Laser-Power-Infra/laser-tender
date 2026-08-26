@@ -17,6 +17,7 @@ import {
   refreshCosting,
   updateTenderEmailId,
   updateTenderEmailSubjectLine,
+  updateTenderLostStillScope,
 } from "@/actions/tenders";
 
 type SortField = keyof SmartsheetTender;
@@ -35,6 +36,7 @@ const COLUMNS: ColDef[] = [
   { key: "utility",         label: "Utility",            width: 200 },
   { key: "quotationNumber", label: "Quotation Number",   width: 170 },
   { key: "contractNo",      label: "Contract Number",    width: 220 },
+  { key: "LostStillScope" as SortField,  label: "Lost / Still Scope", width: 170 },
   { key: "quotationDate",   label: "Quotation Date",     width: 190 },
   { key: "accountHolder",   label: "Account Holder",     width: 180 },
   { key: "allocatedTo",     label: "Allocated To",       width: 180 },
@@ -80,6 +82,27 @@ function purchaseBadgeClass(val: string): string {
   return "purchase";
 }
 
+function getEffectiveLostStillScope(row: SmartsheetTender, overrides?: Record<string, string | null>): string {
+  const hasContract = !!row.contractNo && row.contractNo.trim() !== "";
+  if (hasContract) return "Awarded";
+  if (row.docketNumber && overrides && overrides.hasOwnProperty(row.docketNumber)) {
+    const ov = overrides[row.docketNumber];
+    if (ov && ov.trim() !== "") return ov.trim();
+    return "";
+  }
+  const raw = (row as any).LostStillScope as string | null | undefined;
+  if (raw && String(raw).trim() !== "") return String(raw).trim();
+  return "";
+}
+
+function lostStillScopeBadgeClass(val: string): string {
+  const v = (val || "").toLowerCase();
+  if (v === "awarded") return "awarded";
+  if (v === "lost") return "lost";
+  if (v === "still scope") return "still-scope";
+  return "";
+}
+
 function parseQuantities(qtyStr: string | null): number[] {
   if (!qtyStr) return [];
   const parts = qtyStr.split(/[\n,;]+/).map(p => p.trim()).filter(Boolean);
@@ -115,6 +138,13 @@ function cellText(row: SmartsheetTender, key: string): string {
       { label: "Filler", price: row.fillerPrice },
     ].filter(m => m.price !== null && m.price !== undefined && m.price !== 0);
     return activeRates.map(m => `${m.label}: ${m.price}`).join(" | ");
+  }
+  if (key === "LostStillScope") {
+    const hasContract = !!row.contractNo && row.contractNo.trim() !== "";
+    if (hasContract) return "Awarded";
+    const raw = (row as any).LostStillScope;
+    if (raw === null || raw === undefined || String(raw).trim() === "") return "";
+    return String(raw).trim();
   }
   const v = (row as any)[key];
   if (v === null || v === undefined || v === "") return "";
@@ -171,6 +201,10 @@ const TenderDashboardPage: React.FC = () => {
   const [editEmailSubjectValue, setEditEmailSubjectValue] = useState("");
   const [savingEmailSubject, setSavingEmailSubject] = useState<Record<string, boolean>>({});
   const [emailSubjectOverrides, setEmailSubjectOverrides] = useState<Record<string, string | null>>({});
+
+  // Lost / Still Scope
+  const [savingLostStillScope, setSavingLostStillScope] = useState<Record<string, boolean>>({});
+  const [lostStillScopeOverrides, setLostStillScopeOverrides] = useState<Record<string, string | null>>({});
 
   const [syncing, setSyncing] = useState(false);
 
@@ -390,6 +424,23 @@ const TenderDashboardPage: React.FC = () => {
     }
   };
 
+  const handleSaveLostStillScope = async (docketNumber: string, value: string | null) => {
+    if (savingLostStillScope[docketNumber]) return;
+    setSavingLostStillScope(prev => ({ ...prev, [docketNumber]: true }));
+    try {
+      const json = await updateTenderLostStillScope(docketNumber, value);
+      if (json.success) {
+        setLostStillScopeOverrides(prev => ({ ...prev, [docketNumber]: value }));
+      } else {
+        console.error("Failed to update Lost/Still Scope:", json.error);
+      }
+    } catch (err) {
+      console.error("Failed to update Lost/Still Scope:", err);
+    } finally {
+      setSavingLostStillScope(prev => ({ ...prev, [docketNumber]: false }));
+    }
+  };
+
   const handleRefresh = async () => {
     if (syncing) return;
     setSyncing(true);
@@ -423,6 +474,7 @@ const TenderDashboardPage: React.FC = () => {
     setContactNoOverrides({});
     setEmailIdOverrides({});
     setEmailSubjectOverrides({});
+    // keep saved Lost/Still Scope overrides, but clearing filters should not clear selections — no clear needed
     setColSearches(Object.fromEntries(COLUMNS.map(c => [c.key, ""])));
     setColFilterSelected({});
     setOpenColDropdown(null);
@@ -439,6 +491,10 @@ const TenderDashboardPage: React.FC = () => {
     if (q) {
       rows = rows.filter(row =>
         COLUMNS.some(col => {
+          if (col.key === "LostStillScope") {
+            const v = getEffectiveLostStillScope(row, lostStillScopeOverrides).toLowerCase();
+            return v !== "" && v.includes(q);
+          }
           const v = cellText(row, col.key).toLowerCase();
           if (v !== "") return v.includes(q);
           if (col.key === "rawMaterials") {
@@ -468,6 +524,9 @@ const TenderDashboardPage: React.FC = () => {
       const sVal = val.trim().toLowerCase();
       if (!sVal) return;
       rows = rows.filter(row => {
+        if (key === "LostStillScope") {
+          return getEffectiveLostStillScope(row, lostStillScopeOverrides).toLowerCase().includes(sVal);
+        }
         if (key === "rawMaterials") {
           const materials = [
             { label: "al", price: row.aluminiumPrice },
@@ -534,6 +593,15 @@ const TenderDashboardPage: React.FC = () => {
         rows = rows.filter(row => {
           const has = !!row.attachmentUrl;
           return selected.includes(has ? "Has Attachment" : "No Attachment");
+        });
+        return;
+      }
+
+      if (key === "LostStillScope") {
+        rows = rows.filter(row => {
+          const v = getEffectiveLostStillScope(row, lostStillScopeOverrides);
+          if (selected.includes("(blank)") && v === "") return true;
+          return v !== "" && selected.includes(v);
         });
         return;
       }
@@ -652,6 +720,12 @@ const TenderDashboardPage: React.FC = () => {
           set.add(r.attachmentUrl ? "Has Attachment" : "No Attachment");
           return;
         }
+        if (key === "LostStillScope") {
+          const v = getEffectiveLostStillScope(r, lostStillScopeOverrides);
+          if (v) set.add(v);
+          else set.add("(blank)");
+          return;
+        }
         const v = cellText(r, key);
         if (v !== "") set.add(v);
       });
@@ -661,6 +735,7 @@ const TenderDashboardPage: React.FC = () => {
   }, [
     data,
     allocatedToOverrides,
+    lostStillScopeOverrides,
     search,
     colSearches,
     colFilterSelected,
@@ -685,6 +760,7 @@ const TenderDashboardPage: React.FC = () => {
     colSearches,
     colFilterSelected,
     allocatedToOverrides,
+    lostStillScopeOverrides,
     qtyMin,
     qtyMax,
     enquiryStartDate,
@@ -761,8 +837,11 @@ const TenderDashboardPage: React.FC = () => {
 
   // Sort
   const sorted = useMemo<SmartsheetTender[]>(() => {
-    return [...filtered].sort((a, b) => cmp(a[sortField], b[sortField], sortDir));
-  }, [filtered, sortField, sortDir]);
+    if (sortField === "LostStillScope") {
+      return [...filtered].sort((a, b) => cmp(getEffectiveLostStillScope(a, lostStillScopeOverrides), getEffectiveLostStillScope(b, lostStillScopeOverrides), sortDir));
+    }
+    return [...filtered].sort((a, b) => cmp((a as any)[sortField], (b as any)[sortField], sortDir));
+  }, [filtered, sortField, sortDir, lostStillScopeOverrides]);
 
   // Paginate
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
@@ -825,7 +904,9 @@ const TenderDashboardPage: React.FC = () => {
     const tableRows = sorted.map(rec => {
       const cells = COLUMNS.map(col => {
         let val: any;
-        if (col.key === "rawMaterials") {
+        if (col.key === "LostStillScope") {
+          val = getEffectiveLostStillScope(rec, lostStillScopeOverrides);
+        } else if (col.key === "rawMaterials") {
           const activeRates = [
             { label: "Al", price: rec.aluminiumPrice },
             { label: "Al Alloy", price: rec.aluminiumAlloyPrice },
@@ -838,7 +919,7 @@ const TenderDashboardPage: React.FC = () => {
           ].filter(m => m.price !== null && m.price !== undefined && m.price !== 0);
           val = activeRates.map(m => `${m.label}: ${m.price}`).join(" | ");
         } else {
-          val = rec[col.key];
+          val = (rec as any)[col.key];
         }
         if (val === null || val === undefined) return "<td style='border:1px solid #ddd;padding:8px;'></td>";
         return `<td style='border:1px solid #ddd;padding:8px;'>${String(val)}</td>`;
@@ -1401,6 +1482,31 @@ const TenderDashboardPage: React.FC = () => {
                                 ) : row.contractNo
                               ) : <span className="smartsheet-null-cell">—</span>}
                             </td>
+                            {/* Lost / Still Scope */}
+                            <td style={{ textAlign: "center" }}>
+                              {(() => {
+                                const awarded = !!(row.contractNo && row.contractNo.trim() !== "");
+                                const effective = getEffectiveLostStillScope(row, lostStillScopeOverrides);
+                                if (awarded) {
+                                  return <span className="purchase-type-badge purchase" style={{ background: "#e6f4ea", color: "#137333", borderColor: "#b7e1c0" }}>Awarded</span>;
+                                }
+                                return (
+                                  <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
+                                    <button
+                                      className={`ra-toggle-btn ${effective === "Lost" ? "ra-no" : "ra-inactive"}`}
+                                      disabled={!!savingLostStillScope[row.docketNumber!]}
+                                      onClick={() => row.docketNumber && handleSaveLostStillScope(row.docketNumber, "Lost")}
+                                    >Lost</button>
+                                    <button
+                                      className={`ra-toggle-btn ${effective === "Still Scope" ? "ra-yes" : "ra-inactive"}`}
+                                      disabled={!!savingLostStillScope[row.docketNumber!]}
+                                      onClick={() => row.docketNumber && handleSaveLostStillScope(row.docketNumber, "Still Scope")}
+                                    >Still Scope</button>
+                                    {!!savingLostStillScope[row.docketNumber!] && <span style={{ fontSize: 10, color: "#999" }}>...</span>}
+                                  </div>
+                                );
+                              })()}
+                            </td>
                             {/* Quotation Date */}
                             <td>
                               {row.quotationDate ?? <span className="smartsheet-null-cell">—</span>}
@@ -1901,12 +2007,14 @@ const TenderDashboardPage: React.FC = () => {
                 ? emailSubjectOverrides[selectedTender.docketNumber]
                 : selectedTender.emailSubjectLine ?? null
             }
+            effectiveLostStillScope={getEffectiveLostStillScope(selectedTender, lostStillScopeOverrides)}
             savingAllocated={selectedTender.docketNumber ? !!savingAllocated[selectedTender.docketNumber] : false}
             savingStatus={selectedTender.docketNumber ? !!savingStatus[selectedTender.docketNumber] : false}
             savingContact={selectedTender.docketNumber ? !!savingContact[selectedTender.docketNumber] : false}
             savingEmailId={selectedTender.docketNumber ? !!savingEmailId[selectedTender.docketNumber] : false}
             savingEmailSubject={selectedTender.docketNumber ? !!savingEmailSubject[selectedTender.docketNumber] : false}
             savingReverseAuction={selectedTender.docketNumber ? !!savingReverseAuction[selectedTender.docketNumber] : false}
+            savingLostStillScope={selectedTender.docketNumber ? !!savingLostStillScope[selectedTender.docketNumber] : false}
             onSaveAllocatedTo={async val => {
               if (!selectedTender.docketNumber) return;
               const dn = selectedTender.docketNumber;
@@ -1983,9 +2091,13 @@ const TenderDashboardPage: React.FC = () => {
                 setSavingEmailSubject(prev => ({ ...prev, [dn]: false }));
               }
             }}
-            onSaveReverseAuction={val => {
+            onSaveReverseAuction={(val: string) => {
               if (!selectedTender.docketNumber) return;
               handleSaveReverseAuction(selectedTender.docketNumber!, val);
+            }}
+            onSaveLostStillScope={(val: string | null) => {
+              if (!selectedTender.docketNumber) return;
+              handleSaveLostStillScope(selectedTender.docketNumber!, val);
             }}
           />
         )}
