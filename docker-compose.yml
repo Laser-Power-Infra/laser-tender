@@ -1,0 +1,32 @@
+services:
+  bom:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    # Replaced 'build:' with the GHCR image
+    image: ghcr.io/laser-power-infra/bom:${APP_VERSION:-latest}
+
+    container_name: laser-tender
+    ports:
+      - "4173:4173"
+
+    env_file:
+      - .env.production
+
+    environment:
+      NODE_ENV: production
+      PORT: 4173
+      HOSTNAME: 0.0.0.0
+
+      
+
+    restart: unless-stopped
+
+    networks:
+      - infra
+
+
+
+networks:
+  infra:
+    external: true
