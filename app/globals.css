@@ -489,6 +489,22 @@
     text-transform: none;
   }
 
+  .column-filter-box {
+    @apply flex w-full flex-col gap-1;
+  }
+
+  .column-filter-row {
+    @apply relative flex w-full items-center;
+  }
+
+  .col-filter-clear-btn {
+    @apply absolute right-1 flex h-4 w-4 cursor-pointer items-center justify-center rounded-full bg-[#e1e6eb] text-[9px] font-bold text-navy transition-colors;
+  }
+
+  .col-filter-clear-btn:hover {
+    @apply bg-[#ff6b6b] text-white;
+  }
+
   .column-date-filter {
     @apply mt-0.5 flex w-full items-center gap-1;
   }
@@ -556,6 +572,18 @@
   }
 
   .multiselect-trigger-btn:focus {
+    @apply border-brand;
+  }
+
+  .multiselect-trigger-btn.multiselect-trigger-active {
+    @apply border-brand bg-brand/10 font-bold text-brand;
+  }
+
+  .multiselect-panel-search {
+    @apply box-border h-6 w-full rounded border border-[#dcdcdc] bg-white px-1.5 py-1 font-sans text-[11px] font-medium text-navy outline-none transition-colors;
+  }
+
+  .multiselect-panel-search:focus {
     @apply border-brand;
   }
 

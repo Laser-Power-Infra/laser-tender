@@ -191,18 +191,27 @@ export async function updateTenderEmailSubjectLine(
   }
 }
 
-export async function pushCostingToQueue(): Promise<TenderActionResponse> {
+export async function pushCostingToQueue(opts?: { docketNumbers?: string[]; testMode?: boolean }): Promise<TenderActionResponse> {
   try {
     const tenders = await DatabaseSmartsheetService.getAllSmartsheetTenders();
 
+    const docketFilter = opts?.testMode && opts?.docketNumbers && opts.docketNumbers.length > 0
+      ? new Set(opts.docketNumbers.map(d => (d || "").trim().toLowerCase()).filter(Boolean))
+      : null;
+
     let published = 0;
     let failed = 0;
-    const total = tenders.filter((t) => {
+    let skippedNoUrl = 0;
+    const filteredTenders = docketFilter
+      ? tenders.filter(t => docketFilter.has((t.docketNumber || "").trim().toLowerCase()))
+      : tenders;
+
+    const total = filteredTenders.filter((t) => {
       const url = (t.attachmentUrl || "").trim();
       return url && url !== "-";
     }).length;
 
-    for (const tender of tenders) {
+    for (const tender of filteredTenders) {
       const stored = (tender.attachmentUrl || "").trim();
       if (!stored || stored === "-") continue;
 

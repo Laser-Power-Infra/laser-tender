@@ -3,6 +3,8 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useSmartsheetTenders } from "@/hooks/useSmartsheetTenders";
 import { SmartsheetTender } from "@/types/smartsheetTender";
 import TenderDetailSheet from "@/components/TenderDetailSheet";
+import { ColumnFilter } from "@/components/ColumnFilter";
+import { MultiSelectDropdown } from "@/components/MultiSelectDropdown";
 import {
   updateTenderAllocatedTo,
   updateTenderStatus,
@@ -95,6 +97,30 @@ function parseQuantities(qtyStr: string | null): number[] {
   return nums;
 }
 
+/** Return a single normalized string representation for a column's cell value,
+ *  used for text-search and dropdown unique-value extraction. */
+function cellText(row: SmartsheetTender, key: string): string {
+  if (key === "enquiryDate" || key === "quotationDate") {
+    return formatDate((row as any)[key]) || "";
+  }
+  if (key === "rawMaterials") {
+    const activeRates = [
+      { label: "Al", price: row.aluminiumPrice },
+      { label: "Al Alloy", price: row.aluminiumAlloyPrice },
+      { label: "Cu", price: row.copperTapePrice },
+      { label: "Semicon", price: row.extrudedSemiconductivePrice },
+      { label: "XLPE", price: row.htXlpePrice },
+      { label: "ST-2", price: row.pvcTypeSt2Price },
+      { label: "Steel", price: row.galvanisedSteelFlatStripPrice },
+      { label: "Filler", price: row.fillerPrice },
+    ].filter(m => m.price !== null && m.price !== undefined && m.price !== 0);
+    return activeRates.map(m => `${m.label}: ${m.price}`).join(" | ");
+  }
+  const v = (row as any)[key];
+  if (v === null || v === undefined || v === "") return "";
+  return String(v).trim();
+}
+
 const TenderDashboardPage: React.FC = () => {
   const { data, loading, error } = useSmartsheetTenders();
 
@@ -107,6 +133,8 @@ const TenderDashboardPage: React.FC = () => {
   const [scanSummary, setScanSummary] = useState<{ scanned: number; matched: number; notFound: number; total: number; remaining: number } | null>(null);
   const [pushingQueue, setPushingQueue] = useState(false);
   const [queueSummary, setQueueSummary] = useState<{ total: number; published: number; failed: number } | null>(null);
+  const [queueTestMode, setQueueTestMode] = useState(true);
+  const [queueTestDockets, setQueueTestDockets] = useState("");
   const [page, setPage]           = useState(1);
   const [pageSize, setPageSize]   = useState(50);
 
@@ -158,70 +186,28 @@ const TenderDashboardPage: React.FC = () => {
     return widths;
   });
 
-  // Column search states (maps each column key to its search term, excluding attachmentUrl)
-  const [colSearches, setColSearches] = useState<Record<string, string>>({
-    enquiryDate: "",
-    partyName: "",
-    docketNumber: "",
-    utility: "",
-    quotationNumber: "",
-    contractNo: "",
-    quotationDate: "",
-    accountHolder: "",
-    allocatedTo: "",
-    status: "",
-    emailId: "",
-    emailSubjectLine: "",
-    contactNo: "",
-    reverseAuctionApplicable: "",
-    tenderPurchase: "",
-    proposedErpItemName: "",
-    proposedQty: "",
-    priceBasis: "",
-    rawMaterials: "",
-  });
+  // Column search states (text search per column)
+  const [colSearches, setColSearches] = useState<Record<string, string>>(
+    () => Object.fromEntries(COLUMNS.map(c => [c.key, ""]))
+  );
+
+  // Column multi-select filter states (selected values per column)
+  const [colFilterSelected, setColFilterSelected] = useState<Record<string, string[]>>({});
+
+  // Open dropdown per column + inner panel search per column
+  const [openColDropdown, setOpenColDropdown] = useState<string | null>(null);
+  const [colPanelSearch, setColPanelSearch] = useState<Record<string, string>>({});
+  const colDropdownRef = useRef<HTMLDivElement | null>(null);
 
   // Specialized filters states
   const [enquiryStartDate, setEnquiryStartDate] = useState("");
   const [enquiryEndDate, setEnquiryEndDate] = useState("");
   const [quotationStartDate, setQuotationStartDate] = useState("");
   const [quotationEndDate, setQuotationEndDate] = useState("");
-  const [tenderPurchaseFilter, setTenderPurchaseFilter] = useState("All");
-  const [priceBasisFilter, setPriceBasisFilter] = useState("All");
   const [alMin, setAlMin] = useState("");
   const [alMax, setAlMax] = useState("");
   const [cuMin, setCuMin] = useState("");
   const [cuMax, setCuMax] = useState("");
-
-  // Account Holder Multi-select dropdown states
-  const [showAccountHolderDropdown, setShowAccountHolderDropdown] = useState(false);
-  const [selectedAccountHolders, setSelectedAccountHolders] = useState<string[]>([]);
-  const accountHolderDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Party Name Multi-select dropdown states
-  const [showPartyDropdown, setShowPartyDropdown] = useState(false);
-  const [selectedParties, setSelectedParties] = useState<string[]>([]);
-  const partyDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Item Name Multi-select dropdown states
-  const [showItemDropdown, setShowItemDropdown] = useState(false);
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
-  const itemDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Quotation Number Multi-select dropdown states
-  const [showQuotationDropdown, setShowQuotationDropdown] = useState(false);
-  const [selectedQuotations, setSelectedQuotations] = useState<string[]>([]);
-  const quotationDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Utility Multi-select dropdown states
-  const [showUtilityDropdown, setShowUtilityDropdown] = useState(false);
-  const [selectedUtilities, setSelectedUtilities] = useState<string[]>([]);
-  const utilityDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Allocated To Multi-select dropdown states
-  const [showAllocatedToDropdown, setShowAllocatedToDropdown] = useState(false);
-  const [selectedAllocatedTo, setSelectedAllocatedTo] = useState<string[]>([]);
-  const allocatedToDropdownRef = useRef<HTMLDivElement>(null);
 
   // Tender Qty min/max states
   const [qtyMin, setQtyMin] = useState("");
@@ -229,34 +215,41 @@ const TenderDashboardPage: React.FC = () => {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (partyDropdownRef.current && !partyDropdownRef.current.contains(event.target as Node)) {
-        setShowPartyDropdown(false);
-      }
-      if (itemDropdownRef.current && !itemDropdownRef.current.contains(event.target as Node)) {
-        setShowItemDropdown(false);
-      }
-      if (quotationDropdownRef.current && !quotationDropdownRef.current.contains(event.target as Node)) {
-        setShowQuotationDropdown(false);
-      }
-      if (utilityDropdownRef.current && !utilityDropdownRef.current.contains(event.target as Node)) {
-        setShowUtilityDropdown(false);
-      }
-      if (accountHolderDropdownRef.current && !accountHolderDropdownRef.current.contains(event.target as Node)) {
-        setShowAccountHolderDropdown(false);
-      }
-      if (allocatedToDropdownRef.current && !allocatedToDropdownRef.current.contains(event.target as Node)) {
-        setShowAllocatedToDropdown(false);
+      if (
+        colDropdownRef.current &&
+        openColDropdown &&
+        !colDropdownRef.current.contains(event.target as Node) &&
+        !(event.target as Element)?.closest(".multiselect-dropdown-panel")
+      ) {
+        setOpenColDropdown(null);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [openColDropdown]);
 
   const handleColSearchChange = (key: string, val: string) => {
-    setColSearches(prev => ({
-      ...prev,
-      [key]: val
-    }));
+    setColSearches(prev => ({ ...prev, [key]: val }));
+    setPage(1);
+  };
+
+  const handleColFilterToggle = (key: string, value: string) => {
+    setColFilterSelected(prev => {
+      const current = prev[key] || [];
+      const next = current.includes(value)
+        ? current.filter(v => v !== value)
+        : [...current, value];
+      return { ...prev, [key]: next };
+    });
+    setPage(1);
+  };
+
+  const handleColFilterClear = (key: string) => {
+    setColFilterSelected(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
     setPage(1);
   };
 
@@ -416,9 +409,6 @@ const TenderDashboardPage: React.FC = () => {
 
   const handleClearAllFilters = () => {
     setSearch("");
-    setTenderPurchaseFilter("All");
-    setPriceBasisFilter("All");
-    setSelectedAccountHolders([]);
     setEnquiryStartDate("");
     setEnquiryEndDate("");
     setQuotationStartDate("");
@@ -427,44 +417,16 @@ const TenderDashboardPage: React.FC = () => {
     setAlMax("");
     setCuMin("");
     setCuMax("");
-    setSelectedParties([]);
-    setSelectedItems([]);
-    setSelectedQuotations([]);
-    setSelectedUtilities([]);
-    setSelectedAllocatedTo([]);
     setReverseAuctionOverrides({});
-    setShowPartyDropdown(false);
-    setShowItemDropdown(false);
-    setShowQuotationDropdown(false);
-    setShowUtilityDropdown(false);
-    setShowAccountHolderDropdown(false);
-    setShowAllocatedToDropdown(false);
     setQtyMin("");
     setQtyMax("");
     setContactNoOverrides({});
     setEmailIdOverrides({});
     setEmailSubjectOverrides({});
-    setColSearches({
-      enquiryDate: "",
-      partyName: "",
-      docketNumber: "",
-      utility: "",
-      quotationNumber: "",
-      contractNo: "",
-      quotationDate: "",
-      accountHolder: "",
-      allocatedTo: "",
-      status: "",
-      emailId: "",
-      emailSubjectLine: "",
-      contactNo: "",
-      reverseAuctionApplicable: "",
-      tenderPurchase: "",
-      proposedErpItemName: "",
-      proposedQty: "",
-      priceBasis: "",
-      rawMaterials: "",
-    });
+    setColSearches(Object.fromEntries(COLUMNS.map(c => [c.key, ""])));
+    setColFilterSelected({});
+    setOpenColDropdown(null);
+    setColPanelSearch({});
     setPage(1);
   };
 
@@ -473,21 +435,12 @@ const TenderDashboardPage: React.FC = () => {
   function applyFilters(baseRows: SmartsheetTender[], excludeKeys: string[] = []): SmartsheetTender[] {
     let rows = baseRows;
 
-    if (!excludeKeys.includes("tenderPurchase") && tenderPurchaseFilter !== "All") {
-      rows = rows.filter(r => r.tenderPurchase === tenderPurchaseFilter);
-    }
-
-    if (!excludeKeys.includes("accountHolder") && selectedAccountHolders.length > 0) {
-      rows = rows.filter(r => {
-        const holder = (r.accountHolder ?? "").trim();
-        return holder !== "" && selectedAccountHolders.includes(holder);
-      });
-    }
-
     const q = search.trim().toLowerCase();
     if (q) {
       rows = rows.filter(row =>
         COLUMNS.some(col => {
+          const v = cellText(row, col.key).toLowerCase();
+          if (v !== "") return v.includes(q);
           if (col.key === "rawMaterials") {
             const materials = [
               { label: "al", price: row.aluminiumPrice },
@@ -504,67 +457,92 @@ const TenderDashboardPage: React.FC = () => {
               (m.label.includes(q) || String(m.price).includes(q))
             );
           }
-          const v = row[col.key];
-          return v && String(v).toLowerCase().includes(q);
+          return false;
         })
       );
     }
 
+    // Per-column text search
     Object.entries(colSearches).forEach(([key, val]) => {
+      if (excludeKeys.includes(key)) return;
       const sVal = val.trim().toLowerCase();
-      if (sVal) {
-        rows = rows.filter(row => {
-          if (key === "rawMaterials") {
-            const materials = [
-              { label: "al", price: row.aluminiumPrice },
-              { label: "al alloy", price: row.aluminiumAlloyPrice },
-              { label: "cu", price: row.copperTapePrice },
-              { label: "semicon", price: row.extrudedSemiconductivePrice },
-              { label: "xlpe", price: row.htXlpePrice },
-              { label: "st-2", price: row.pvcTypeSt2Price },
-              { label: "steel", price: row.galvanisedSteelFlatStripPrice },
-              { label: "filler", price: row.fillerPrice }
-            ];
-            return materials.some(m =>
-              m.price !== null && m.price !== undefined && m.price !== 0 &&
-              (m.label.includes(sVal) || String(m.price).includes(sVal))
-            );
-          }
-          const v = row[key as keyof SmartsheetTender];
-          return v !== null && v !== undefined && String(v).toLowerCase().includes(sVal);
-        });
-      }
+      if (!sVal) return;
+      rows = rows.filter(row => {
+        if (key === "rawMaterials") {
+          const materials = [
+            { label: "al", price: row.aluminiumPrice },
+            { label: "al alloy", price: row.aluminiumAlloyPrice },
+            { label: "cu", price: row.copperTapePrice },
+            { label: "semicon", price: row.extrudedSemiconductivePrice },
+            { label: "xlpe", price: row.htXlpePrice },
+            { label: "st-2", price: row.pvcTypeSt2Price },
+            { label: "steel", price: row.galvanisedSteelFlatStripPrice },
+            { label: "filler", price: row.fillerPrice }
+          ];
+          return materials.some(m =>
+            m.price !== null && m.price !== undefined && m.price !== 0 &&
+            (m.label.includes(sVal) || String(m.price).includes(sVal))
+          );
+        }
+        return cellText(row, key).toLowerCase().includes(sVal);
+      });
     });
 
-    if (!excludeKeys.includes("partyName") && selectedParties.length > 0) {
-      rows = rows.filter(row => row.partyName && selectedParties.includes(row.partyName.trim()));
-    }
+    // Per-column multi-select filter
+    Object.entries(colFilterSelected).forEach(([key, selected]) => {
+      if (excludeKeys.includes(key)) return;
+      if (!selected || selected.length === 0) return;
 
-    if (!excludeKeys.includes("itemName") && selectedItems.length > 0) {
+      if (key === "allocatedTo") {
+        rows = rows.filter(row => {
+          const val = (row.docketNumber && allocatedToOverrides.hasOwnProperty(row.docketNumber))
+            ? allocatedToOverrides[row.docketNumber]
+            : row.allocatedTo;
+          if (selected.includes("(blank)") && !val) return true;
+          return val && selected.includes(val.trim());
+        });
+        return;
+      }
+
+      if (key === "proposedErpItemName") {
+        rows = rows.filter(row => {
+          if (!row.proposedErpItemName) return false;
+          const rowItems = row.proposedErpItemName.split(/\n+/).map(p => p.trim()).filter(Boolean);
+          return rowItems.some(item => selected.includes(item));
+        });
+        return;
+      }
+
+      if (key === "rawMaterials") {
+        rows = rows.filter(row => {
+          const activeRates = [
+            { label: "Al", price: row.aluminiumPrice },
+            { label: "Al Alloy", price: row.aluminiumAlloyPrice },
+            { label: "Cu", price: row.copperTapePrice },
+            { label: "Semicon", price: row.extrudedSemiconductivePrice },
+            { label: "XLPE", price: row.htXlpePrice },
+            { label: "ST-2", price: row.pvcTypeSt2Price },
+            { label: "Steel", price: row.galvanisedSteelFlatStripPrice },
+            { label: "Filler", price: row.fillerPrice }
+          ].filter(m => m.price !== null && m.price !== undefined && m.price !== 0);
+          return activeRates.some(m => selected.includes(m.label));
+        });
+        return;
+      }
+
+      if (key === "attachmentUrl") {
+        rows = rows.filter(row => {
+          const has = !!row.attachmentUrl;
+          return selected.includes(has ? "Has Attachment" : "No Attachment");
+        });
+        return;
+      }
+
       rows = rows.filter(row => {
-        if (!row.proposedErpItemName) return false;
-        const rowItems = row.proposedErpItemName.split(/\n+/).map(p => p.trim()).filter(Boolean);
-        return rowItems.some(item => selectedItems.includes(item));
+        const v = cellText(row, key);
+        return v !== "" && selected.includes(v);
       });
-    }
-
-    if (!excludeKeys.includes("quotationNumber") && selectedQuotations.length > 0) {
-      rows = rows.filter(row => row.quotationNumber && selectedQuotations.includes(row.quotationNumber.trim()));
-    }
-
-    if (!excludeKeys.includes("utility") && selectedUtilities.length > 0) {
-      rows = rows.filter(row => row.utility && selectedUtilities.includes(row.utility.trim()));
-    }
-
-    if (!excludeKeys.includes("allocatedTo") && selectedAllocatedTo.length > 0) {
-      rows = rows.filter(row => {
-        const val = (row.docketNumber && allocatedToOverrides.hasOwnProperty(row.docketNumber))
-          ? allocatedToOverrides[row.docketNumber]
-          : row.allocatedTo;
-        if (selectedAllocatedTo.includes("(blank)") && !val) return true;
-        return val && selectedAllocatedTo.includes(val.trim());
-      });
-    }
+    });
 
     if (qtyMin.trim() !== "" || qtyMax.trim() !== "") {
       rows = rows.filter(row => {
@@ -613,13 +591,6 @@ const TenderDashboardPage: React.FC = () => {
       });
     }
 
-    if (!excludeKeys.includes("priceBasis") && priceBasisFilter !== "All") {
-      rows = rows.filter(row => {
-        const pb = row.priceBasis || "";
-        return pb.toLowerCase() === priceBasisFilter.toLowerCase();
-      });
-    }
-
     if (alMin.trim() !== "" || alMax.trim() !== "") {
       rows = rows.filter(row => {
         if (row.aluminiumPrice === null || row.aluminiumPrice === undefined) return false;
@@ -640,115 +611,91 @@ const TenderDashboardPage: React.FC = () => {
     return rows;
   }
 
-  // Unique purchase types for sidebar/column filters
-  const purchaseTypes = useMemo(() => {
-    const set = new Set<string>();
-    const rows = applyFilters(data, ["tenderPurchase"]);
-    rows.forEach(r => { if (r.tenderPurchase) set.add(r.tenderPurchase); });
-    return ["All", ...Array.from(set).sort()];
-  }, [data, search, colSearches, selectedAccountHolders, selectedParties, selectedItems, selectedQuotations, selectedUtilities, selectedAllocatedTo, qtyMin, qtyMax, enquiryStartDate, enquiryEndDate, quotationStartDate, quotationEndDate, priceBasisFilter, alMin, alMax, cuMin, cuMax]);
-
-  // Unique price basis options for dropdown filter
-  const priceBasisOptions = useMemo(() => {
-    const set = new Set<string>();
-    const rows = applyFilters(data, ["priceBasis"]);
-    rows.forEach(r => { if (r.priceBasis) set.add(r.priceBasis); });
-    return ["All", ...Array.from(set).sort()];
-  }, [data, search, colSearches, tenderPurchaseFilter, selectedAccountHolders, selectedParties, selectedItems, selectedQuotations, selectedUtilities, selectedAllocatedTo, qtyMin, qtyMax, enquiryStartDate, enquiryEndDate, quotationStartDate, quotationEndDate, alMin, alMax, cuMin, cuMax]);
-
-  // Unique account holders for dropdown filter
-  const accountHolderOptions = useMemo(() => {
-    const set = new Set<string>();
-    const rows = applyFilters(data, ["accountHolder"]);
-    rows.forEach(r => { if (r.accountHolder) set.add(r.accountHolder.trim()); });
-    return Array.from(set).sort();
-  }, [data, search, colSearches, tenderPurchaseFilter, selectedParties, selectedItems, selectedQuotations, selectedUtilities, selectedAllocatedTo, qtyMin, qtyMax, enquiryStartDate, enquiryEndDate, quotationStartDate, quotationEndDate, priceBasisFilter, alMin, alMax, cuMin, cuMax]);
-
-  // Unique party names for dropdown filter
-  const partyNamesList = useMemo(() => {
-    const set = new Set<string>();
-    const rows = applyFilters(data, ["partyName"]);
-    rows.forEach(r => { if (r.partyName) set.add(r.partyName.trim()); });
-    return ["All", ...Array.from(set).sort()];
-  }, [data, search, colSearches, tenderPurchaseFilter, selectedAccountHolders, selectedItems, selectedQuotations, selectedUtilities, selectedAllocatedTo, qtyMin, qtyMax, enquiryStartDate, enquiryEndDate, quotationStartDate, quotationEndDate, priceBasisFilter, alMin, alMax, cuMin, cuMax]);
-
-  // Unique item names for dropdown filter
-  const itemNamesList = useMemo(() => {
-    const set = new Set<string>();
-    const rows = applyFilters(data, ["itemName"]);
-    rows.forEach(r => {
-      if (r.proposedErpItemName) {
-        r.proposedErpItemName.split(/\n+/).forEach(item => {
-          const trimmed = item.trim();
-          if (trimmed) set.add(trimmed);
-        });
-      }
+  // Cascading unique values per column: rows matching all filters EXCEPT this column's own.
+  const cascadingOptions = useMemo<Record<string, string[]>>(() => {
+    const map: Record<string, string[]> = {};
+    COLUMNS.forEach(col => {
+      const key = col.key;
+      const set = new Set<string>();
+      const rows = applyFilters(data, [key]);
+      rows.forEach(r => {
+        if (key === "proposedErpItemName" && r.proposedErpItemName) {
+          r.proposedErpItemName.split(/\n+/).forEach(item => {
+            const t = item.trim();
+            if (t) set.add(t);
+          });
+          return;
+        }
+        if (key === "rawMaterials") {
+          const activeRates = [
+            { label: "Al", price: r.aluminiumPrice },
+            { label: "Al Alloy", price: r.aluminiumAlloyPrice },
+            { label: "Cu", price: r.copperTapePrice },
+            { label: "Semicon", price: r.extrudedSemiconductivePrice },
+            { label: "XLPE", price: r.htXlpePrice },
+            { label: "ST-2", price: r.pvcTypeSt2Price },
+            { label: "Steel", price: r.galvanisedSteelFlatStripPrice },
+            { label: "Filler", price: r.fillerPrice }
+          ].filter(m => m.price !== null && m.price !== undefined && m.price !== 0);
+          activeRates.forEach(m => set.add(m.label));
+          return;
+        }
+        if (key === "allocatedTo") {
+          const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
+            ? allocatedToOverrides[r.docketNumber]
+            : r.allocatedTo;
+          if (val?.trim()) set.add(val.trim());
+          else set.add("(blank)");
+          return;
+        }
+        if (key === "attachmentUrl") {
+          set.add(r.attachmentUrl ? "Has Attachment" : "No Attachment");
+          return;
+        }
+        const v = cellText(r, key);
+        if (v !== "") set.add(v);
+      });
+      map[key] = Array.from(set).sort();
     });
-    return ["All", ...Array.from(set).sort()];
-  }, [data, search, colSearches, tenderPurchaseFilter, selectedAccountHolders, selectedParties, selectedQuotations, selectedUtilities, selectedAllocatedTo, qtyMin, qtyMax, enquiryStartDate, enquiryEndDate, quotationStartDate, quotationEndDate, priceBasisFilter, alMin, alMax, cuMin, cuMax]);
-
-  // Unique quotation numbers for dropdown filter
-  const quotationNumbersList = useMemo(() => {
-    const set = new Set<string>();
-    const rows = applyFilters(data, ["quotationNumber"]);
-    rows.forEach(r => {
-      if (r.quotationNumber) {
-        const trimmed = r.quotationNumber.trim();
-        if (trimmed) set.add(trimmed);
-      }
-    });
-    return ["All", ...Array.from(set).sort()];
-  }, [data, search, colSearches, tenderPurchaseFilter, selectedAccountHolders, selectedParties, selectedItems, selectedUtilities, selectedAllocatedTo, qtyMin, qtyMax, enquiryStartDate, enquiryEndDate, quotationStartDate, quotationEndDate, priceBasisFilter, alMin, alMax, cuMin, cuMax]);
+    return map;
+  }, [
+    data,
+    allocatedToOverrides,
+    search,
+    colSearches,
+    colFilterSelected,
+    qtyMin,
+    qtyMax,
+    enquiryStartDate,
+    enquiryEndDate,
+    quotationStartDate,
+    quotationEndDate,
+    alMin,
+    alMax,
+    cuMin,
+    cuMax
+  ]);
 
   // Filter
   const filtered = useMemo<SmartsheetTender[]>(() => {
     return applyFilters(data, []);
   }, [
-    data, 
-    search, 
-    colSearches, 
-    tenderPurchaseFilter, 
-    selectedAccountHolders,
-    selectedParties,
-    selectedItems,
-    selectedQuotations,
-    selectedUtilities,
-    selectedAllocatedTo,
+    data,
+    search,
+    colSearches,
+    colFilterSelected,
+    allocatedToOverrides,
     qtyMin,
     qtyMax,
-    enquiryStartDate, 
-    enquiryEndDate, 
+    enquiryStartDate,
+    enquiryEndDate,
     quotationStartDate,
     quotationEndDate,
-    priceBasisFilter, 
-    alMin, 
-    alMax, 
-    cuMin, 
+    alMin,
+    alMax,
+    cuMin,
     cuMax
   ]);
-
-  // Unique utilities for dropdown filter
-  const utilitiesList = useMemo(() => {
-    const set = new Set<string>();
-    const rows = applyFilters(data, ["utility"]);
-    rows.forEach(r => { if (r.utility) set.add(r.utility.trim()); });
-    return ["All", ...Array.from(set).sort()];
-  }, [data, search, colSearches, tenderPurchaseFilter, selectedAccountHolders, selectedParties, selectedItems, selectedQuotations, selectedAllocatedTo, qtyMin, qtyMax, enquiryStartDate, enquiryEndDate, quotationStartDate, quotationEndDate, priceBasisFilter, alMin, alMax, cuMin, cuMax]);
-
-  // Unique allocatedTo values for dropdown filter
-  const allocatedToList = useMemo(() => {
-    const set = new Set<string>();
-    const rows = applyFilters(data, ["allocatedTo"]);
-    rows.forEach(r => {
-      const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
-        ? allocatedToOverrides[r.docketNumber]
-        : r.allocatedTo;
-      if (val) set.add(val.trim());
-    });
-    const list = Array.from(set).sort();
-    list.push("(blank)");
-    return ["All", ...list];
-  }, [data, allocatedToOverrides, search, colSearches, tenderPurchaseFilter, selectedAccountHolders, selectedParties, selectedItems, selectedQuotations, selectedUtilities, qtyMin, qtyMax, enquiryStartDate, enquiryEndDate, quotationStartDate, quotationEndDate, priceBasisFilter, alMin, alMax, cuMin, cuMax]);
 
   // Allocated To counts for assigned persons sidebar cards (cascading calculation)
   const allocatedToCounts = useMemo(() => {
@@ -782,19 +729,13 @@ const TenderDashboardPage: React.FC = () => {
     allocatedToOverrides,
     search,
     colSearches,
-    tenderPurchaseFilter,
-    selectedAccountHolders,
-    selectedParties,
-    selectedItems,
-    selectedQuotations,
-    selectedUtilities,
+    colFilterSelected,
     qtyMin,
     qtyMax,
     enquiryStartDate,
     enquiryEndDate,
     quotationStartDate,
     quotationEndDate,
-    priceBasisFilter,
     alMin,
     alMax,
     cuMin,
@@ -804,17 +745,14 @@ const TenderDashboardPage: React.FC = () => {
   console.log("allocated: ",allocatedToCounts)
 
   const handleAllocatedCardClick = (personName: string, e: React.MouseEvent) => {
+    const current = colFilterSelected["allocatedTo"] || [];
     if (e.ctrlKey || e.metaKey) {
-      if (selectedAllocatedTo.includes(personName)) {
-        setSelectedAllocatedTo(selectedAllocatedTo.filter(p => p !== personName));
-      } else {
-        setSelectedAllocatedTo([...selectedAllocatedTo, personName]);
-      }
+      handleColFilterToggle("allocatedTo", personName);
     } else {
-      if (selectedAllocatedTo.length === 1 && selectedAllocatedTo[0] === personName) {
-        setSelectedAllocatedTo([]);
+      if (current.length === 1 && current[0] === personName) {
+        handleColFilterClear("allocatedTo");
       } else {
-        setSelectedAllocatedTo([personName]);
+        setColFilterSelected(prev => ({ ...prev, allocatedTo: [personName] }));
       }
     }
     setPage(1);
@@ -866,7 +804,10 @@ const TenderDashboardPage: React.FC = () => {
     setPushingQueue(true);
     setQueueSummary(null);
     try {
-      const json = await pushCostingToQueue();
+      const docketNumbers = queueTestMode
+        ? queueTestDockets.split(/[,\n]+/).map(s => s.trim()).filter(Boolean)
+        : undefined;
+      const json = await pushCostingToQueue({ docketNumbers, testMode: queueTestMode });
       if (!json.success) {
         console.error("Failed to push costing to queue:", json.error);
         return;
@@ -988,13 +929,19 @@ const TenderDashboardPage: React.FC = () => {
           {/* Filters */}
           <div className="tender-filter-section">
             <div className="tender-filter-label">Type Filter</div>
-            <select
-              className="tender-filter-select"
-              value={tenderPurchaseFilter}
-              onChange={e => { setTenderPurchaseFilter(e.target.value); setPage(1); }}
-            >
-              {purchaseTypes.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
+            <MultiSelectDropdown
+              selected={colFilterSelected["tenderPurchase"] || []}
+              options={cascadingOptions["tenderPurchase"] || []}
+              isOpen={openColDropdown === "tenderPurchase"}
+              onToggle={v => handleColFilterToggle("tenderPurchase", v)}
+              onClear={() => handleColFilterClear("tenderPurchase")}
+              onSelectAll={() => {
+                setColFilterSelected(prev => ({ ...prev, tenderPurchase: [...(cascadingOptions["tenderPurchase"] || [])] }));
+                setPage(1);
+              }}
+              onToggleOpen={() => setOpenColDropdown(openColDropdown === "tenderPurchase" ? null : "tenderPurchase")}
+              hasActive={(colFilterSelected["tenderPurchase"] || []).length > 0}
+            />
           </div>
 
           <div className="tender-filter-section">
@@ -1017,7 +964,7 @@ const TenderDashboardPage: React.FC = () => {
               </div>
             ) : (
               allocatedToCounts.map(({ name, count }) => {
-                const isActive = selectedAllocatedTo.includes(name);
+                const isActive = (colFilterSelected["allocatedTo"] || []).includes(name);
                 return (
                   <div
                     key={name}
@@ -1061,11 +1008,33 @@ const TenderDashboardPage: React.FC = () => {
           <button
             className="tender-refresh-sidebar-btn"
             onClick={handlePushCostingToQueue}
-            disabled={loading || pushingQueue}
+            disabled={loading || pushingQueue || (queueTestMode && queueTestDockets.split(/[,\n]+/).map(s=>s.trim()).filter(Boolean).length===0)}
             style={{ marginTop: 8 }}
           >
-            {pushingQueue ? "🚀 Pushing..." : "🚀 Push to Queue (Test)"}
+            {pushingQueue ? "🚀 Pushing..." : queueTestMode ? "🚀 Push Test Dockets to Queue" : "🚀 Push All to Queue"}
           </button>
+          <div style={{ marginTop: 8, background: "rgba(255,255,255,0.06)", padding: 8, borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: "#fff", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={queueTestMode}
+                onChange={e => setQueueTestMode(e.target.checked)}
+                style={{ cursor: "pointer" }}
+              />
+              Test Mode (selected dockets)
+            </label>
+            <textarea
+              className="tender-filter-input"
+              style={{ marginTop: 6, minHeight: 64, fontSize: 11, opacity: queueTestMode ? 1 : 0.5 }}
+              placeholder="Enter 4-5 docket numbers, comma or newline separated — e.g. ENQ-20581-25-26, 20275"
+              value={queueTestDockets}
+              onChange={e => setQueueTestDockets(e.target.value)}
+              disabled={!queueTestMode}
+            />
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: 4, lineHeight: 1.4 }}>
+              Only dockets with non-null Attachment URL will be sent. Include one network (Z:\…) + one Drive/AppSheet https to test both file_type. Toggle OFF to send all.
+            </div>
+          </div>
           {costingSummary && (
             <div style={{ fontSize: 11, color: "#5f6368", marginTop: 4, textAlign: "center" }}>
               Costing: {costingSummary.matched}/{costingSummary.total} records matched
@@ -1186,434 +1155,176 @@ const TenderDashboardPage: React.FC = () => {
                       <thead>
                         <tr>
                           {COLUMNS.map((col, colIdx) => {
+                            const key = col.key;
                             const isSticky = colIdx < 2;
                             const leftOffset = colIdx === 0 ? "0px" : (colIdx === 1 ? `${colWidths[COLUMNS[0].key]}px` : undefined);
-                            const isDropdownOpen = 
-                               (col.key === "utility" && showUtilityDropdown) ||
-                               (col.key === "quotationNumber" && showQuotationDropdown) ||
-                               (col.key === "partyName" && showPartyDropdown) ||
-                               (col.key === "proposedErpItemName" && showItemDropdown) ||
-                               (col.key === "accountHolder" && showAccountHolderDropdown) ||
-                               (col.key === "allocatedTo" && showAllocatedToDropdown);
-                             
-                             const thClassName = [
-                               isSticky ? `sticky-column-header sticky-col-${colIdx + 1}` : "",
-                               isDropdownOpen ? "th-dropdown-open" : ""
-                             ].filter(Boolean).join(" ");
+                            const isDropdownOpen = openColDropdown === key;
+                            const selected = colFilterSelected[key] || [];
+                            const options = cascadingOptions[key] || [];
+                            const searchValue = colSearches[key] || "";
+                            const thClassName = [
+                              isSticky ? `sticky-column-header sticky-col-${colIdx + 1}` : "",
+                              isDropdownOpen ? "th-dropdown-open" : ""
+                            ].filter(Boolean).join(" ");
+
+                            const colFilterCommon = {
+                              searchValue,
+                              onSearchChange: (v: string) => handleColSearchChange(key, v),
+                              selected,
+                              options,
+                              isOpen: isDropdownOpen,
+                              onToggleOpen: () => setOpenColDropdown(isDropdownOpen ? null : key),
+                              onToggle: (v: string) => handleColFilterToggle(key, v),
+                              onClear: () => handleColFilterClear(key),
+                              onSelectAll: () => {
+                                setColFilterSelected(prev => ({ ...prev, [key]: [...options] }));
+                                setPage(1);
+                              },
+                              panelSearchValue: colPanelSearch[key] || "",
+                              onPanelSearchChange: (v: string) => setColPanelSearch(prev => ({ ...prev, [key]: v })),
+                            };
+
                             return (
                               <th
-                                key={col.key}
+                                key={key}
                                 className={thClassName}
-                                style={{ 
-                                  width: colWidths[col.key], 
-                                  minWidth: colWidths[col.key],
+                                style={{
+                                  width: colWidths[key],
+                                  minWidth: colWidths[key],
                                   position: "sticky",
                                   left: leftOffset,
                                   zIndex: isSticky ? 4 : 2,
                                 }}
                               >
-                                <div className="smartsheet-th-inner" onClick={() => handleSort(col.key)}>
+                                <div className="smartsheet-th-inner" onClick={() => handleSort(key)}>
                                   {col.label}
                                   <span className="smartsheet-sort-icon">
-                                    {sortField === col.key
+                                    {sortField === key
                                       ? sortDir === "asc" ? "▲" : "▼"
                                       : "⇅"}
                                   </span>
                                 </div>
                                 <div className="column-filter-container" onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
-                                  {col.key !== "attachmentUrl" && col.key !== "proposedQty" && col.key !== "enquiryDate" && col.key !== "quotationDate" && col.key !== "reverseAuctionApplicable" && col.key !== "cvaValue" && (
-                                    <input
-                                      type="text"
-                                      className="column-search-input"
-                                      placeholder="Search..."
-                                      value={colSearches[col.key] || ""}
-                                      onChange={e => handleColSearchChange(col.key, e.target.value)}
-                                    />
+                                  {key === "enquiryDate" || key === "quotationDate" ? (
+                                    <>
+                                      <div className="column-date-filter">
+                                        <input
+                                          type="date"
+                                          className="date-filter-input"
+                                          value={key === "enquiryDate" ? enquiryStartDate : quotationStartDate}
+                                          onChange={e => {
+                                            if (key === "enquiryDate") setEnquiryStartDate(e.target.value);
+                                            else setQuotationStartDate(e.target.value);
+                                            setPage(1);
+                                          }}
+                                          title="Start Date"
+                                        />
+                                        <span className="date-filter-to">to</span>
+                                        <input
+                                          type="date"
+                                          className="date-filter-input"
+                                          value={key === "enquiryDate" ? enquiryEndDate : quotationEndDate}
+                                          onChange={e => {
+                                            if (key === "enquiryDate") setEnquiryEndDate(e.target.value);
+                                            else setQuotationEndDate(e.target.value);
+                                            setPage(1);
+                                          }}
+                                          title="End Date"
+                                        />
+                                        {((key === "enquiryDate" && (enquiryStartDate || enquiryEndDate)) || (key === "quotationDate" && (quotationStartDate || quotationEndDate))) && (
+                                          <button
+                                            className="date-filter-clear-btn"
+                                            onClick={() => {
+                                              if (key === "enquiryDate") { setEnquiryStartDate(""); setEnquiryEndDate(""); }
+                                              else { setQuotationStartDate(""); setQuotationEndDate(""); }
+                                              setPage(1);
+                                            }}
+                                            title="Clear date filter"
+                                          >
+                                            ✕
+                                          </button>
+                                        )}
+                                      </div>
+                                      <ColumnFilter {...colFilterCommon} placeholder="Search..." />
+                                    </>
+                                  ) : key === "proposedQty" ? (
+                                    <>
+                                      <div className="filter-row">
+                                        <input
+                                          type="number"
+                                          placeholder="Min"
+                                          className="col-price-filter-input"
+                                          value={qtyMin}
+                                          onChange={e => { setQtyMin(e.target.value); setPage(1); }}
+                                          title="Tender Qty Min"
+                                        />
+                                        <span className="filter-row-dash">-</span>
+                                        <input
+                                          type="number"
+                                          placeholder="Max"
+                                          className="col-price-filter-input"
+                                          value={qtyMax}
+                                          onChange={e => { setQtyMax(e.target.value); setPage(1); }}
+                                          title="Tender Qty Max"
+                                        />
+                                      </div>
+                                      <ColumnFilter {...colFilterCommon} placeholder="Search..." />
+                                    </>
+                                  ) : key === "rawMaterials" ? (
+                                    <>
+                                      <div className="column-raw-materials-filter">
+                                        <div className="filter-row">
+                                          <span className="filter-row-label">Al:</span>
+                                          <input
+                                            type="number"
+                                            placeholder="Min"
+                                            className="col-price-filter-input"
+                                            value={alMin}
+                                            onChange={e => { setAlMin(e.target.value); setPage(1); }}
+                                            title="Aluminium Min"
+                                          />
+                                          <span className="filter-row-dash">-</span>
+                                          <input
+                                            type="number"
+                                            placeholder="Max"
+                                            className="col-price-filter-input"
+                                            value={alMax}
+                                            onChange={e => { setAlMax(e.target.value); setPage(1); }}
+                                            title="Aluminium Max"
+                                          />
+                                        </div>
+                                        <div className="filter-row" style={{ marginTop: "4px" }}>
+                                          <span className="filter-row-label">Cu:</span>
+                                          <input
+                                            type="number"
+                                            placeholder="Min"
+                                            className="col-price-filter-input"
+                                            value={cuMin}
+                                            onChange={e => { setCuMin(e.target.value); setPage(1); }}
+                                            title="Copper Min"
+                                          />
+                                          <span className="filter-row-dash">-</span>
+                                          <input
+                                            type="number"
+                                            placeholder="Max"
+                                            className="col-price-filter-input"
+                                            value={cuMax}
+                                            onChange={e => { setCuMax(e.target.value); setPage(1); }}
+                                            title="Copper Max"
+                                          />
+                                        </div>
+                                      </div>
+                                      <ColumnFilter {...colFilterCommon} placeholder="Search..." />
+                                    </>
+                                  ) : (
+                                    <ColumnFilter {...colFilterCommon} placeholder="Search..." />
                                   )}
-                                {col.key === "utility" && (
-                                  <div className="custom-multiselect-container" ref={utilityDropdownRef}>
-                                    <button 
-                                      className="multiselect-trigger-btn"
-                                      onClick={() => setShowUtilityDropdown(!showUtilityDropdown)}
-                                      style={{ marginBottom: "4px" }}
-                                    >
-                                      {selectedUtilities.length === 0 ? "All Utilities" : `${selectedUtilities.length} Selected`} <span className="dropdown-arrow">▼</span>
-                                    </button>
-                                    {showUtilityDropdown && (
-                                      <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
-                                        <div className="multiselect-actions">
-                                          <button className="multiselect-action-btn" onClick={() => { setSelectedUtilities([]); setPage(1); }}>Clear All</button>
-                                          <button className="multiselect-action-btn" onClick={() => { setSelectedUtilities(utilitiesList.filter(u => u !== "All")); setPage(1); }}>Select All</button>
-                                        </div>
-                                        <div className="multiselect-options-list">
-                                          {utilitiesList.filter(u => u !== "All").map(util => (
-                                            <label key={util} className="multiselect-option-label">
-                                              <input 
-                                                type="checkbox"
-                                                checked={selectedUtilities.includes(util)}
-                                                onChange={() => {
-                                                  if (selectedUtilities.includes(util)) {
-                                                    setSelectedUtilities(selectedUtilities.filter(u => u !== util));
-                                                  } else {
-                                                    setSelectedUtilities([...selectedUtilities, util]);
-                                                  }
-                                                  setPage(1);
-                                                }}
-                                              />
-                                              <span>{util}</span>
-                                            </label>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                                {col.key === "proposedQty" && (
-                                  <div className="filter-row">
-                                    <input
-                                      type="number"
-                                      placeholder="Min"
-                                      className="col-price-filter-input"
-                                      value={qtyMin}
-                                      onChange={e => { setQtyMin(e.target.value); setPage(1); }}
-                                      title="Tender Qty Min"
-                                    />
-                                    <span className="filter-row-dash">-</span>
-                                    <input
-                                      type="number"
-                                      placeholder="Max"
-                                      className="col-price-filter-input"
-                                      value={qtyMax}
-                                      onChange={e => { setQtyMax(e.target.value); setPage(1); }}
-                                      title="Tender Qty Max"
-                                    />
-                                  </div>
-                                )}
-                                {col.key === "quotationNumber" && (
-                                  <div className="custom-multiselect-container" ref={quotationDropdownRef}>
-                                    <button 
-                                      className="multiselect-trigger-btn"
-                                      onClick={() => setShowQuotationDropdown(!showQuotationDropdown)}
-                                    >
-                                      {selectedQuotations.length === 0 ? "All Quotations" : `${selectedQuotations.length} Selected`} <span className="dropdown-arrow">▼</span>
-                                    </button>
-                                    {showQuotationDropdown && (
-                                      <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
-                                        <div className="multiselect-actions">
-                                          <button className="multiselect-action-btn" onClick={() => { setSelectedQuotations([]); setPage(1); }}>Clear All</button>
-                                          <button className="multiselect-action-btn" onClick={() => { setSelectedQuotations(quotationNumbersList.filter(q => q !== "All")); setPage(1); }}>Select All</button>
-                                        </div>
-                                        <div className="multiselect-options-list">
-                                          {quotationNumbersList.filter(q => q !== "All").map(qNum => (
-                                            <label key={qNum} className="multiselect-option-label">
-                                              <input 
-                                                type="checkbox"
-                                                checked={selectedQuotations.includes(qNum)}
-                                                onChange={() => {
-                                                  if (selectedQuotations.includes(qNum)) {
-                                                    setSelectedQuotations(selectedQuotations.filter(q => q !== qNum));
-                                                  } else {
-                                                    setSelectedQuotations([...selectedQuotations, qNum]);
-                                                  }
-                                                  setPage(1);
-                                                }}
-                                              />
-                                              <span>{qNum}</span>
-                                            </label>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                                {col.key === "partyName" && (
-                                  <div className="custom-multiselect-container" ref={partyDropdownRef}>
-                                    <button 
-                                      className="multiselect-trigger-btn"
-                                      onClick={() => setShowPartyDropdown(!showPartyDropdown)}
-                                    >
-                                      {selectedParties.length === 0 ? "All Parties" : `${selectedParties.length} Selected`} <span className="dropdown-arrow">▼</span>
-                                    </button>
-                                    {showPartyDropdown && (
-                                      <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
-                                        <div className="multiselect-actions">
-                                          <button className="multiselect-action-btn" onClick={() => { setSelectedParties([]); setPage(1); }}>Clear All</button>
-                                          <button className="multiselect-action-btn" onClick={() => { setSelectedParties(partyNamesList.filter(p => p !== "All")); setPage(1); }}>Select All</button>
-                                        </div>
-                                        <div className="multiselect-options-list">
-                                          {partyNamesList.filter(p => p !== "All").map(party => (
-                                            <label key={party} className="multiselect-option-label">
-                                              <input 
-                                                type="checkbox"
-                                                checked={selectedParties.includes(party)}
-                                                onChange={() => {
-                                                  if (selectedParties.includes(party)) {
-                                                    setSelectedParties(selectedParties.filter(p => p !== party));
-                                                  } else {
-                                                    setSelectedParties([...selectedParties, party]);
-                                                  }
-                                                  setPage(1);
-                                                }}
-                                              />
-                                              <span>{party}</span>
-                                            </label>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                                {col.key === "proposedErpItemName" && (
-                                  <div className="custom-multiselect-container" ref={itemDropdownRef}>
-                                    <button 
-                                      className="multiselect-trigger-btn"
-                                      onClick={() => setShowItemDropdown(!showItemDropdown)}
-                                    >
-                                      {selectedItems.length === 0 ? "All Items" : `${selectedItems.length} Selected`} <span className="dropdown-arrow">▼</span>
-                                    </button>
-                                    {showItemDropdown && (
-                                      <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
-                                        <div className="multiselect-actions">
-                                          <button className="multiselect-action-btn" onClick={() => { setSelectedItems([]); setPage(1); }}>Clear All</button>
-                                          <button className="multiselect-action-btn" onClick={() => { setSelectedItems(itemNamesList.filter(p => p !== "All")); setPage(1); }}>Select All</button>
-                                        </div>
-                                        <div className="multiselect-options-list">
-                                          {itemNamesList.filter(p => p !== "All").map(item => (
-                                            <label key={item} className="multiselect-option-label">
-                                              <input 
-                                                type="checkbox"
-                                                checked={selectedItems.includes(item)}
-                                                onChange={() => {
-                                                  if (selectedItems.includes(item)) {
-                                                    setSelectedItems(selectedItems.filter(i => i !== item));
-                                                  } else {
-                                                    setSelectedItems([...selectedItems, item]);
-                                                  }
-                                                  setPage(1);
-                                                }}
-                                              />
-                                              <span className="option-text" title={item}>{item}</span>
-                                            </label>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                                {col.key === "enquiryDate" && (
-                                  <div className="column-date-filter">
-                                    <input
-                                      type="date"
-                                      className="date-filter-input"
-                                      value={enquiryStartDate}
-                                      onChange={e => { setEnquiryStartDate(e.target.value); setPage(1); }}
-                                      title="Start Date"
-                                    />
-                                    <span className="date-filter-to">to</span>
-                                    <input
-                                      type="date"
-                                      className="date-filter-input"
-                                      value={enquiryEndDate}
-                                      onChange={e => { setEnquiryEndDate(e.target.value); setPage(1); }}
-                                      title="End Date"
-                                    />
-                                    {(enquiryStartDate || enquiryEndDate) && (
-                                      <button
-                                        className="date-filter-clear-btn"
-                                        onClick={() => {
-                                          setEnquiryStartDate("");
-                                          setEnquiryEndDate("");
-                                          setPage(1);
-                                        }}
-                                        title="Clear date filter"
-                                      >
-                                        ✕
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                                {col.key === "quotationDate" && (
-                                  <div className="column-date-filter">
-                                    <input
-                                      type="date"
-                                      className="date-filter-input"
-                                      value={quotationStartDate}
-                                      onChange={e => { setQuotationStartDate(e.target.value); setPage(1); }}
-                                      title="Start Date"
-                                    />
-                                    <span className="date-filter-to">to</span>
-                                    <input
-                                      type="date"
-                                      className="date-filter-input"
-                                      value={quotationEndDate}
-                                      onChange={e => { setQuotationEndDate(e.target.value); setPage(1); }}
-                                      title="End Date"
-                                    />
-                                    {(quotationStartDate || quotationEndDate) && (
-                                      <button
-                                        className="date-filter-clear-btn"
-                                        onClick={() => {
-                                          setQuotationStartDate("");
-                                          setQuotationEndDate("");
-                                          setPage(1);
-                                        }}
-                                        title="Clear date filter"
-                                      >
-                                        ✕
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                                {col.key === "tenderPurchase" && (
-                                  <select
-                                    className="price-basis-filter-select"
-                                    value={tenderPurchaseFilter}
-                                    onChange={e => { setTenderPurchaseFilter(e.target.value); setPage(1); }}
-                                  >
-                                    {purchaseTypes.map(t => (
-                                      <option key={t} value={t}>
-                                        {t}
-                                      </option>
-                                    ))}
-                                  </select>
-                                )}
-                                {col.key === "accountHolder" && (
-                                  <div className="custom-multiselect-container" ref={accountHolderDropdownRef}>
-                                    <button
-                                      className="multiselect-trigger-btn"
-                                      onClick={() => setShowAccountHolderDropdown(!showAccountHolderDropdown)}
-                                    >
-                                      {selectedAccountHolders.length === 0 ? "All Holders" : `${selectedAccountHolders.length} Selected`} <span className="dropdown-arrow">▼</span>
-                                    </button>
-                                    {showAccountHolderDropdown && (
-                                      <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
-                                        <div className="multiselect-actions">
-                                          <button className="multiselect-action-btn" onClick={() => { setSelectedAccountHolders([]); setPage(1); }}>Clear All</button>
-                                          <button className="multiselect-action-btn" onClick={() => { setSelectedAccountHolders(accountHolderOptions); setPage(1); }}>Select All</button>
-                                        </div>
-                                        <div className="multiselect-options-list">
-                                          {accountHolderOptions.map(holder => (
-                                            <label key={holder} className="multiselect-option-label">
-                                              <input
-                                                type="checkbox"
-                                                checked={selectedAccountHolders.includes(holder)}
-                                                onChange={() => {
-                                                  if (selectedAccountHolders.includes(holder)) {
-                                                    setSelectedAccountHolders(selectedAccountHolders.filter(h => h !== holder));
-                                                  } else {
-                                                    setSelectedAccountHolders([...selectedAccountHolders, holder]);
-                                                  }
-                                                  setPage(1);
-                                                }}
-                                              />
-                                              <span>{holder}</span>
-                                            </label>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                                {col.key === "allocatedTo" && (
-                                  <div className="custom-multiselect-container" ref={allocatedToDropdownRef}>
-                                    <button
-                                      className="multiselect-trigger-btn"
-                                      onClick={() => setShowAllocatedToDropdown(!showAllocatedToDropdown)}
-                                    >
-                                      {selectedAllocatedTo.length === 0 ? "All Allocated" : `${selectedAllocatedTo.length} Selected`} <span className="dropdown-arrow">▼</span>
-                                    </button>
-                                    {showAllocatedToDropdown && (
-                                      <div className="multiselect-dropdown-panel" style={{ left: 0, right: "auto", minWidth: "260px", maxWidth: "none" }}>
-                                        <div className="multiselect-actions">
-                                          <button className="multiselect-action-btn" onClick={() => { setSelectedAllocatedTo([]); setPage(1); }}>Clear All</button>
-                                          <button className="multiselect-action-btn" onClick={() => { setSelectedAllocatedTo(allocatedToList.filter(p => p !== "All")); setPage(1); }}>Select All</button>
-                                        </div>
-                                        <div className="multiselect-options-list">
-                                          {allocatedToList.filter(p => p !== "All").map(item => (
-                                            <label key={item} className="multiselect-option-label">
-                                              <input
-                                                type="checkbox"
-                                                checked={selectedAllocatedTo.includes(item)}
-                                                onChange={() => {
-                                                  if (selectedAllocatedTo.includes(item)) {
-                                                    setSelectedAllocatedTo(selectedAllocatedTo.filter(p => p !== item));
-                                                  } else {
-                                                    setSelectedAllocatedTo([...selectedAllocatedTo, item]);
-                                                  }
-                                                  setPage(1);
-                                                }}
-                                              />
-                                              <span>{item}</span>
-                                            </label>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                                {col.key === "priceBasis" && (
-                                  <select
-                                    className="price-basis-filter-select"
-                                    value={priceBasisFilter}
-                                    onChange={e => { setPriceBasisFilter(e.target.value); setPage(1); }}
-                                  >
-                                    {priceBasisOptions.map(t => (
-                                      <option key={t} value={t}>
-                                        {t}
-                                      </option>
-                                    ))}
-                                  </select>
-                                )}
-                                {col.key === "rawMaterials" && (
-                                  <div className="column-raw-materials-filter">
-                                    <div className="filter-row">
-                                      <span className="filter-row-label">Al:</span>
-                                      <input
-                                        type="number"
-                                        placeholder="Min"
-                                        className="col-price-filter-input"
-                                        value={alMin}
-                                        onChange={e => { setAlMin(e.target.value); setPage(1); }}
-                                        title="Aluminium Min"
-                                      />
-                                      <span className="filter-row-dash">-</span>
-                                      <input
-                                        type="number"
-                                        placeholder="Max"
-                                        className="col-price-filter-input"
-                                        value={alMax}
-                                        onChange={e => { setAlMax(e.target.value); setPage(1); }}
-                                        title="Aluminium Max"
-                                      />
-                                    </div>
-                                    <div className="filter-row" style={{ marginTop: "4px" }}>
-                                      <span className="filter-row-label">Cu:</span>
-                                      <input
-                                        type="number"
-                                        placeholder="Min"
-                                        className="col-price-filter-input"
-                                        value={cuMin}
-                                        onChange={e => { setCuMin(e.target.value); setPage(1); }}
-                                        title="Copper Min"
-                                      />
-                                      <span className="filter-row-dash">-</span>
-                                      <input
-                                        type="number"
-                                        placeholder="Max"
-                                        className="col-price-filter-input"
-                                        value={cuMax}
-                                        onChange={e => { setCuMax(e.target.value); setPage(1); }}
-                                        title="Copper Max"
-                                      />
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                              <div
-                                className="col-resize-handle"
-                                onMouseDown={e => handleResizeStart(e, col.key)}
-                              />
-                            </th>
+                                </div>
+                                <div
+                                  className="col-resize-handle"
+                                  onMouseDown={e => handleResizeStart(e, key)}
+                                />
+                              </th>
                             );
                           })}
                         </tr>
