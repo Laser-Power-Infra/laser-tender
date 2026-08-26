@@ -13,6 +13,9 @@ $NetworkBackupDir = "W:\laser-tender-dashboard-backup\"
 # $Database = "gmd-quotation"
 # $NetworkBackupDir = "W:\gmd-dashboard-backup\"
 
+# $Database = "quotation-backup"
+# $NetworkBackupDir = "W:\enquiry-quotation-backup\"
+
 
 # $Database = "testing"  
 
