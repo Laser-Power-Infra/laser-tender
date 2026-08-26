@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useSalesContracts } from "@/hooks/useSalesContracts";
 import { SalesContract } from "@/types/salesContract";
 import { MultiSelectDropdown } from "@/components/MultiSelectDropdown";
+import { ColumnFilter } from "@/components/ColumnFilter";
 
 type SortField = keyof SalesContract;
 type SortDir = "asc" | "desc";
@@ -107,6 +108,9 @@ const SalesContractPage: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>({});
+  const [colSearches, setColSearches] = useState<Record<string, string>>(
+    () => Object.fromEntries([...COLUMNS.map(c => c.key), ...SIDEBAR_FILTERS.map(s => s.key)].map(k => [k, ""]))
+  );
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [openSidebarDropdown, setOpenSidebarDropdown] = useState<string | null>(null);
 
@@ -187,6 +191,7 @@ const SalesContractPage: React.FC = () => {
   const handleClearAllFilters = () => {
     setSearch("");
     setColumnFilters({});
+    setColSearches(Object.fromEntries([...COLUMNS.map(c => c.key), ...SIDEBAR_FILTERS.map(s => s.key)].map(k => [k, ""])));
     setContractDateStart("");
     setContractDateEnd("");
     setPartyOrderDateStart("");
@@ -216,6 +221,13 @@ const SalesContractPage: React.FC = () => {
         })
       );
     }
+
+    Object.entries(colSearches).forEach(([key, val]) => {
+      if (excludeFieldKeys.includes(key)) return;
+      const sVal = val.trim().toLowerCase();
+      if (!sVal) return;
+      r = r.filter(row => displayValue(row, key).toLowerCase().includes(sVal));
+    });
 
     Object.entries(columnFilters).forEach(([key, selected]) => {
       if (excludeFieldKeys.includes(key)) return;
@@ -292,11 +304,11 @@ const SalesContractPage: React.FC = () => {
       map[key] = Array.from(set).sort();
     });
     return map;
-  }, [data, search, columnFilters, contractDateStart, contractDateEnd, partyOrderDateStart, partyOrderDateEnd, deliveryDateStart, deliveryDateEnd, basicValueMin, basicValueMax]);
+  }, [data, search, colSearches, columnFilters, contractDateStart, contractDateEnd, partyOrderDateStart, partyOrderDateEnd, deliveryDateStart, deliveryDateEnd, basicValueMin, basicValueMax]);
 
   const filtered = useMemo<SalesContract[]>(() => {
     return applyAllFilters(data, []);
-  }, [data, search, columnFilters, contractDateStart, contractDateEnd, partyOrderDateStart, partyOrderDateEnd, deliveryDateStart, deliveryDateEnd, basicValueMin, basicValueMax]);
+  }, [data, search, colSearches, columnFilters, contractDateStart, contractDateEnd, partyOrderDateStart, partyOrderDateEnd, deliveryDateStart, deliveryDateEnd, basicValueMin, basicValueMax]);
 
   const sorted = useMemo<SalesContract[]>(() => {
     return [...filtered].sort((a, b) => cmp(displayValue(a, sortField), displayValue(b, sortField), sortDir));
@@ -529,18 +541,35 @@ const SalesContractPage: React.FC = () => {
                             </div>
                             <div className="column-filter-container" style={{ position: "relative" }}>
                               {isDateCol ? (
-                                col.key === "contractDate" ? showDateFilter(contractDateStart, contractDateEnd, setContractDateStart, setContractDateEnd)
-                                : col.key === "partyOrderDate" ? showDateFilter(partyOrderDateStart, partyOrderDateEnd, setPartyOrderDateStart, setPartyOrderDateEnd)
-                                : showDateFilter(deliveryDateStart, deliveryDateEnd, setDeliveryDateStart, setDeliveryDateEnd)
+                                <>
+                                  {col.key === "contractDate" ? showDateFilter(contractDateStart, contractDateEnd, setContractDateStart, setContractDateEnd)
+                                    : col.key === "partyOrderDate" ? showDateFilter(partyOrderDateStart, partyOrderDateEnd, setPartyOrderDateStart, setPartyOrderDateEnd)
+                                    : showDateFilter(deliveryDateStart, deliveryDateEnd, setDeliveryDateStart, setDeliveryDateEnd)}
+                                  <ColumnFilter
+                                    searchValue={colSearches[col.key] || ""}
+                                    onSearchChange={v => { setColSearches(prev => ({ ...prev, [col.key]: v })); setPage(1); }}
+                                    selected={selected}
+                                    options={cascadingUniqueValues[col.key] || []}
+                                    isOpen={openDropdown === col.key}
+                                    onToggleOpen={() => setOpenDropdown(openDropdown === col.key ? null : col.key)}
+                                    onToggle={val => handleColFilterToggle(col.key, val)}
+                                    onClear={() => { handleClearColumnFilter(col.key); setOpenDropdown(null); }}
+                                    onSelectAll={() => { setColumnFilters(prev => ({ ...prev, [col.key]: [...(cascadingUniqueValues[col.key] || [])] })); setPage(1); setOpenDropdown(null); }}
+                                    placeholder="Search..."
+                                  />
+                                </>
                               ) : (
-                                <MultiSelectDropdown
+                                <ColumnFilter
+                                  searchValue={colSearches[col.key] || ""}
+                                  onSearchChange={v => { setColSearches(prev => ({ ...prev, [col.key]: v })); setPage(1); }}
                                   selected={selected}
                                   options={cascadingUniqueValues[col.key] || []}
                                   isOpen={openDropdown === col.key}
+                                  onToggleOpen={() => setOpenDropdown(openDropdown === col.key ? null : col.key)}
                                   onToggle={val => handleColFilterToggle(col.key, val)}
                                   onClear={() => { handleClearColumnFilter(col.key); setOpenDropdown(null); }}
                                   onSelectAll={() => { setColumnFilters(prev => ({ ...prev, [col.key]: [...(cascadingUniqueValues[col.key] || [])] })); setPage(1); setOpenDropdown(null); }}
-                                  onToggleOpen={() => setOpenDropdown(openDropdown === col.key ? null : col.key)}
+                                  placeholder="Search..."
                                 />
                               )}
                             </div>
