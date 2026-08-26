@@ -4,7 +4,7 @@ services:
     #   context: .
     #   dockerfile: Dockerfile
     # Replaced 'build:' with the GHCR image
-    image: ghcr.io/laser-power-infra/bom:${APP_VERSION:-latest}
+    image: ghcr.io/laser-power-infra/laser-tender:${APP_VERSION:-latest}
 
     container_name: laser-tender
     ports:
