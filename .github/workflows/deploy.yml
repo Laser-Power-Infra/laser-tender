@@ -65,3 +65,7 @@ jobs:
           docker compose pull laser-tender
           docker compose up -d --no-deps laser-tender
           docker image prune -f
+
+
+
+          
