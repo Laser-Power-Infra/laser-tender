@@ -1062,7 +1062,7 @@ const TenderDashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* <div className="tender-sidebar-footer">
+        <div className="tender-sidebar-footer">
           <button
             className="tender-refresh-sidebar-btn"
             onClick={handleRefresh}
@@ -1070,7 +1070,7 @@ const TenderDashboardPage: React.FC = () => {
           >
             {syncing ? "🔄 Syncing..." : "🔄 Refresh Data"}
           </button>
-          <button
+          {/* <button
             className="tender-refresh-sidebar-btn"
             onClick={handleRefreshCosting}
             disabled={loading || costingRefreshing}
@@ -1130,8 +1130,8 @@ const TenderDashboardPage: React.FC = () => {
             <div style={{ fontSize: 11, color: "#5f6368", marginTop: 4, textAlign: "center" }}>
               Queue: {queueSummary.published}/{queueSummary.total} logged (publish off)
             </div>
-          )}
-        </div> */}
+          )} */}
+        </div>
       </aside>
 
       {/* ── Main Workspace ──────────────────────────────────────────────── */}
