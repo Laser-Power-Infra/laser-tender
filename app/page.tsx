@@ -162,7 +162,7 @@ const TenderDashboardPage: React.FC = () => {
   const [scanningCosting, setScanningCosting] = useState(false);
   const [scanSummary, setScanSummary] = useState<{ scanned: number; matched: number; notFound: number; total: number; remaining: number } | null>(null);
   const [pushingQueue, setPushingQueue] = useState(false);
-  const [queueSummary, setQueueSummary] = useState<{ total: number; published: number; failed: number } | null>(null);
+  const [queueSummary, setQueueSummary] = useState<{ total: number; published: number; failed: number; skippedNoUrl: number; skippedParsed: number } | null>(null);
   const [queueTestMode, setQueueTestMode] = useState(true);
   const [queueTestDockets, setQueueTestDockets] = useState("");
   const [page, setPage]           = useState(1);
@@ -1128,7 +1128,7 @@ const TenderDashboardPage: React.FC = () => {
           )}
           {queueSummary && (
             <div style={{ fontSize: 11, color: "#5f6368", marginTop: 4, textAlign: "center" }}>
-              Queue: {queueSummary.published}/{queueSummary.total} logged (publish off)
+              Queue: {queueSummary.published}/{queueSummary.total} logged (publish off) · skipped {queueSummary.skippedParsed} parsed / {queueSummary.skippedNoUrl} no-url
             </div>
           )} */}
         </div>

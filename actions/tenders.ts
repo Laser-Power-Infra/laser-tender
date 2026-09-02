@@ -13,7 +13,7 @@ export interface TenderActionResponse<T = unknown> {
   summary?: { matched: number; total: number };
   updatedCount?: number;
   scanSummary?: { scanned: number; matched: number; notFound: number; total: number; remaining: number };
-  queueSummary?: { total: number; published: number; failed: number };
+  queueSummary?: { total: number; published: number; failed: number; skippedNoUrl: number; skippedParsed: number };
 }
 
 export async function getSmartsheetTenders(): Promise<TenderActionResponse> {
@@ -215,18 +215,30 @@ export async function pushCostingToQueue(opts?: { docketNumbers?: string[]; test
     let published = 0;
     let failed = 0;
     let skippedNoUrl = 0;
+    let skippedParsed = 0;
     const filteredTenders = docketFilter
       ? tenders.filter(t => docketFilter.has((t.docketNumber || "").trim().toLowerCase()))
       : tenders;
 
-    const total = filteredTenders.filter((t) => {
-      const url = (t.attachmentUrl || "").trim();
-      return url && url !== "-";
-    }).length;
+    const hasParsedCosting = (t: any): boolean => {
+      const cva = (t.cvaValue || "").trim();
+      if (cva && cva !== "-") return true;
+      const qty = (t.proposedQty || "").trim();
+      if (qty && qty !== "-") return true;
+      return false;
+    };
 
-    for (const tender of filteredTenders) {
+    const eligible = filteredTenders.filter((t) => {
+      const url = (t.attachmentUrl || "").trim();
+      if (!url || url === "-") { skippedNoUrl++; return false; }
+      if (hasParsedCosting(t)) { skippedParsed++; return false; }
+      return true;
+    });
+
+    const total = eligible.length;
+
+    for (const tender of eligible) {
       const stored = (tender.attachmentUrl || "").trim();
-      if (!stored || stored === "-") continue;
 
       let fileLink: string | null = null;
       let fileType: "network" | "external" = "network";
@@ -265,7 +277,7 @@ export async function pushCostingToQueue(opts?: { docketNumbers?: string[]; test
     return {
       success: true,
       data: tenders,
-      queueSummary: { total, published, failed },
+      queueSummary: { total, published, failed, skippedNoUrl, skippedParsed },
     };
   } catch (err) {
     console.error("[QueuePush] Error:", err);

@@ -32,12 +32,15 @@ ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
 # 🟢 FIX: Generate Prisma Client before building
 RUN npx prisma generate
 
-RUN if [ -f package-lock.json ]; then \
-        npm run build; \
-    else \
-        echo "build failed" && exit 1; \
-    fi
+# RUN if [ -f package-lock.json ]; then \
+#         npm run build; \
+#     else \
+#         echo "build failed" && exit 1; \
+#     fi
 
+# AFTER (🟢 Add Next.js build cache mount):
+RUN --mount=type=cache,target=/app/.next/cache \
+    npm run build
 
 
 # stage 3
