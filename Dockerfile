@@ -37,6 +37,9 @@ RUN npx prisma generate
 #     else \
 #         echo "build failed" && exit 1; \
 #     fi
+# AFTER (🟢 Add Next.js build cache mount):
+RUN --mount=type=cache,target=/app/.next/cache \
+    npm run build
 
 # AFTER (🟢 Add Next.js build cache mount):
 RUN --mount=type=cache,target=/app/.next/cache \
