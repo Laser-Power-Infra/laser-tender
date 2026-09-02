@@ -2,19 +2,19 @@
 # PostgreSQL Docker Backup
 # ===========================
 
-$ContainerName = "postgres-prod"
+$ContainerName = "postgres"
 
 # $Database = "enquiry-quotation"
 # $NetworkBackupDir = "W:\enquiry-quotation-backup\"
 
-# $Database = "laser-tender-dashboard-v2"
-# $NetworkBackupDir = "W:\laser-tender-dashboard-backup\"
+$Database = "laser-tender-dashboard-v2"
+$NetworkBackupDir = "W:\laser-tender-dashboard-backup\"
 
 # $Database = "gmd-quotation"
 # $NetworkBackupDir = "W:\gmd-dashboard-backup\"
 
-$Database = "quotation-backup"
-$NetworkBackupDir = "W:\enquiry-quotation-backup\"
+# $Database = "quotation-backup"
+# $NetworkBackupDir = "W:\enquiry-quotation-backup\"
 
 
 # $Database = "testing"  
