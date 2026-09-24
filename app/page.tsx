@@ -1086,7 +1086,7 @@ const TenderDashboardPage: React.FC = () => {
           >
             {syncing ? "🔄 Syncing..." : "🔄 Refresh Data"}
           </button>
-          <button
+          {/* <button
             className="tender-refresh-sidebar-btn"
             onClick={handleRefreshCosting}
             disabled={loading || costingRefreshing}
@@ -1168,7 +1168,7 @@ const TenderDashboardPage: React.FC = () => {
                 ))}
               </div>
             </div>
-          )}
+          )} */}
         </div>
       </aside>
 
