@@ -5,6 +5,7 @@ import { DatabaseSmartsheetService } from "@/services/databaseSmartsheetService"
 import { decryptStoredPath, isPlainUrl } from "@/services/costingFileFinder.mjs";
 import { publishTenderParsingTask } from "@/lib/tenderQueue";
 import { syncSmartsheetToDb } from "@/lib/smartsheet-sync";
+import { prisma } from "@/lib/prisma";
 
 export interface TenderActionResponse<T = unknown> {
   success: boolean;
@@ -26,6 +27,23 @@ export async function getSmartsheetTenders(): Promise<TenderActionResponse> {
       success: false,
       data: [],
       error: err instanceof Error ? err.message : "An unexpected server error occurred.",
+    };
+  }
+}
+
+export async function getCostingScanRuns(limit = 15): Promise<TenderActionResponse> {
+  try {
+    const runs = await prisma.costingScanRun.findMany({
+      orderBy: { startedAt: "desc" },
+      take: Math.max(1, Math.min(limit, 100)),
+    });
+    return { success: true, data: runs };
+  } catch (err) {
+    console.error("[CostingScanRuns] Error:", err);
+    return {
+      success: false,
+      data: [],
+      error: err instanceof Error ? err.message : "Failed to load costing scan history.",
     };
   }
 }

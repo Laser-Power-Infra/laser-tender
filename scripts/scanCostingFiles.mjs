@@ -53,28 +53,102 @@ async function createPrisma() {
   return new PrismaClient({ adapter });
 }
 
+// ── Run-report helpers (persist each scan run to the CostingScanRun table) ──
+async function createRun(prisma, total) {
+  try {
+    const rec = await prisma.costingScanRun.create({
+      data: {
+        startedAt: new Date(),
+        total,
+        scanned: 0,
+        matched: 0,
+        notFound: 0,
+        failed: 0,
+        remaining: total,
+        status: "running",
+      },
+    });
+    return rec.id;
+  } catch (err) {
+    console.warn(`[ScanCosting] Could not create run log: ${err.message}`);
+    return null;
+  }
+}
+
+async function finishRun(prisma, runId, stats, durationMs, errorMsg) {
+  if (!runId) return;
+  let status = "success";
+  if (errorMsg) status = "error";
+  else if (stats.failed > 0) status = "partial";
+  try {
+    await prisma.costingScanRun.update({
+      where: { id: runId },
+      data: {
+        finishedAt: new Date(),
+        durationMs,
+        scanned: stats.scanned,
+        matched: stats.matched,
+        notFound: stats.notFound,
+        failed: stats.failed,
+        remaining: stats.remaining,
+        status,
+        error: errorMsg ? String(errorMsg).slice(0, 2000) : null,
+      },
+    });
+  } catch (err) {
+    console.warn(`[ScanCosting] Could not finalize run log: ${err.message}`);
+  }
+}
+
 async function main() {
   loadEnv();
 
   const limitIdx = process.argv.indexOf("--limit");
-  const LIMIT = limitIdx !== -1 && process.argv[limitIdx + 1]
+  let LIMIT = limitIdx !== -1 && process.argv[limitIdx + 1]
     ? Number(process.argv[limitIdx + 1])
     : null;
+  if (!LIMIT || LIMIT <= 0) {
+    const nightlyLimit = Number(process.env.COSTING_NIGHTLY_SCAN_LIMIT || 0);
+    if (nightlyLimit > 0) LIMIT = nightlyLimit;
+  }
   const docketIdx = process.argv.indexOf("--docket");
   const SINGLE_DOCKET = docketIdx !== -1 && process.argv[docketIdx + 1]
     ? String(process.argv[docketIdx + 1]).trim()
     : null;
 
   const prisma = await createPrisma();
+  const runStartedAt = Date.now();
+  let runId = null;
+  let runError = null;
+  const stats = { scanned: 0, matched: 0, notFound: 0, failed: 0, remaining: 0 };
 
   try {
     let dockets = [];
     if (SINGLE_DOCKET) {
       dockets = [SINGLE_DOCKET];
     } else {
+      const retryDays = Number(process.env.COSTING_SCAN_RETRY_DAYS || 7);
+      const retryCutoff = new Date(Date.now() - retryDays * 24 * 60 * 60 * 1000);
       console.log("[ScanCosting] Reading dockets without attachmentUrl from DB...");
       const rows = await prisma.smartsheetTender.findMany({
-        where: { attachmentUrl: null },
+        where: {
+          AND: [
+            {
+              OR: [
+                { attachmentUrl: null },
+                { attachmentUrl: "" },
+                { attachmentUrl: "-" },
+              ],
+            },
+            {
+              OR: [
+                { costingScanAttemptedAt: null },
+                { costingScanAttemptedAt: { lt: retryCutoff } },
+              ],
+            },
+          ],
+        },
+        orderBy: { costingScanAttemptedAt: { sort: "asc", nulls: "first" } },
         select: { docketNumber: true },
       });
       dockets = rows
@@ -85,6 +159,8 @@ async function main() {
     if (LIMIT && LIMIT > 0) dockets = dockets.slice(0, LIMIT);
     console.log(`[ScanCosting] Processing ${dockets.length} dockets...`);
 
+    runId = await createRun(prisma, dockets.length);
+
     let matched = 0;
     let notFound = 0;
     let failed = 0;
@@ -94,7 +170,12 @@ async function main() {
       const docket = dockets[i];
       const numeric = extractNumericDocket(docket);
       if (!numeric) {
+        updates.push({ docket, path: null });
         notFound++;
+        if (updates.length >= WRITE_BATCH) {
+          await flush(prisma, updates);
+          updates.length = 0;
+        }
         continue;
       }
 
@@ -104,6 +185,11 @@ async function main() {
       } catch (err) {
         console.warn(`[ScanCosting] Search error for ${docket}: ${err.message}`);
         failed++;
+        updates.push({ docket, path: null });
+        if (updates.length >= WRITE_BATCH) {
+          await flush(prisma, updates);
+          updates.length = 0;
+        }
         continue;
       }
 
@@ -111,6 +197,7 @@ async function main() {
         updates.push({ docket, path: encryptStoredPath(buildStoredPath(filePath)) });
         matched++;
       } else {
+        updates.push({ docket, path: null });
         notFound++;
       }
 
@@ -129,22 +216,44 @@ async function main() {
       await flush(prisma, updates);
     }
 
+    stats.scanned = dockets.length;
+    stats.matched = matched;
+    stats.notFound = notFound;
+    stats.failed = failed;
+    stats.remaining = await prisma.smartsheetTender.count({
+      where: {
+        OR: [
+          { attachmentUrl: null },
+          { attachmentUrl: "" },
+          { attachmentUrl: "-" },
+        ],
+      },
+    });
+
     console.log("");
     console.log("[ScanCosting] ── SUMMARY ──");
     console.log(`Processed  : ${dockets.length}`);
     console.log(`Matched    : ${matched}`);
     console.log(`Not found  : ${notFound}`);
     console.log(`Failed     : ${failed}`);
+    console.log(`Remaining  : ${stats.remaining}`);
+  } catch (err) {
+    runError = err.message || String(err);
+    throw err;
   } finally {
+    await finishRun(prisma, runId, stats, Date.now() - runStartedAt, runError).catch(() => {});
     await prisma.$disconnect().catch(() => {});
   }
 }
 
 async function flush(prisma, updates) {
+  const now = new Date();
   const ops = updates.map((u) =>
     prisma.smartsheetTender.update({
       where: { docketNumber: u.docket },
-      data: { attachmentUrl: u.path, lastSyncedAt: new Date() },
+      data: u.path
+        ? { attachmentUrl: u.path, costingScanAttemptedAt: now, lastSyncedAt: now }
+        : { costingScanAttemptedAt: now },
     })
   );
   try {
@@ -154,7 +263,9 @@ async function flush(prisma, updates) {
       try {
         await prisma.smartsheetTender.update({
           where: { docketNumber: u.docket },
-          data: { attachmentUrl: u.path, lastSyncedAt: new Date() },
+          data: u.path
+            ? { attachmentUrl: u.path, costingScanAttemptedAt: now, lastSyncedAt: now }
+            : { costingScanAttemptedAt: now },
         });
       } catch (rowErr) {
         console.warn(`[ScanCosting] FAILED ${u.docket}: ${rowErr.message}`);

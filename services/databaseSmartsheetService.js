@@ -557,11 +557,33 @@ export class DatabaseSmartsheetService {
       return { success: false, reason: "Prisma client unavailable" };
     }
 
+    const runStartedAt = Date.now();
+    let runId = null;
+    let runError = null;
+    let result = { success: false, error: "Unexpected error" };
+
     try {
+      const retryDays = Number(process.env.COSTING_SCAN_RETRY_DAYS || 7);
+      const retryCutoff = new Date(Date.now() - retryDays * 24 * 60 * 60 * 1000);
       const records = await prisma.smartsheetTender.findMany({
         where: {
-          attachmentUrl: null,
+          AND: [
+            {
+              OR: [
+                { attachmentUrl: null },
+                { attachmentUrl: "" },
+                { attachmentUrl: "-" },
+              ],
+            },
+            {
+              OR: [
+                { costingScanAttemptedAt: null },
+                { costingScanAttemptedAt: { lt: retryCutoff } },
+              ],
+            },
+          ],
         },
+        orderBy: { costingScanAttemptedAt: { sort: "asc", nulls: "first" } },
       });
 
       const total = records.length;
@@ -578,14 +600,24 @@ export class DatabaseSmartsheetService {
       const scanned = batch.length;
       let matched = 0;
       const updates = [];
+      const notFoundUpdates = [];
+      const attemptedAt = new Date();
+
+      runId = await this.logScanRunStart({ total, remaining: scannedTotal });
 
       for (const record of batch) {
         const docketNumber = (record.docketNumber || "").trim();
         const numeric = extractNumericDocket(docketNumber);
-        if (!numeric) continue;
+        if (!numeric) {
+          notFoundUpdates.push({ id: record.id });
+          continue;
+        }
 
         const relativePath = findCostingFileRecursive(docketNumber);
-        if (!relativePath) continue;
+        if (!relativePath) {
+          notFoundUpdates.push({ id: record.id });
+          continue;
+        }
 
         updates.push({
           id: record.id,
@@ -601,14 +633,22 @@ export class DatabaseSmartsheetService {
         const ops = batchUpdates.map((u) =>
           prisma.smartsheetTender.update({
             where: { id: u.id },
-            data: { attachmentUrl: u.attachmentUrl, lastSyncedAt: new Date() },
+            data: { attachmentUrl: u.attachmentUrl, costingScanAttemptedAt: attemptedAt, lastSyncedAt: attemptedAt },
           })
         );
         await prisma.$transaction(ops, { maxWait: 5000, timeout: 30000 });
       }
 
+      for (let i = 0; i < notFoundUpdates.length; i += BATCH_SIZE) {
+        const ids = notFoundUpdates.slice(i, i + BATCH_SIZE).map((u) => u.id);
+        await prisma.smartsheetTender.updateMany({
+          where: { id: { in: ids } },
+          data: { costingScanAttemptedAt: attemptedAt },
+        });
+      }
+
       console.log(`[DatabaseSmartsheetService] Costing file scan complete: ${matched}/${scanned} dockets matched (${scannedTotal - scanned} remaining).`);
-      return {
+      result = {
         success: true,
         scanned,
         matched,
@@ -618,7 +658,64 @@ export class DatabaseSmartsheetService {
       };
     } catch (err) {
       console.error("[DatabaseSmartsheetService] Costing file scan failed:", err);
-      return { success: false, error: err.message };
+      runError = err.message;
+      result = { success: false, error: err.message };
+    } finally {
+      await this.logScanRunEnd(runId, {
+        scanned: result.scanned || 0,
+        matched: result.matched || 0,
+        notFound: result.notFound || 0,
+        failed: 0,
+        remaining: typeof result.remaining === "number" ? result.remaining : 0,
+      }, Date.now() - runStartedAt, runError).catch(() => {});
+    }
+
+    return result;
+  }
+
+  static async logScanRunStart({ total, remaining }) {
+    try {
+      const rec = await prisma.costingScanRun.create({
+        data: {
+          startedAt: new Date(),
+          total,
+          scanned: 0,
+          matched: 0,
+          notFound: 0,
+          failed: 0,
+          remaining: remaining || total || 0,
+          status: "running",
+        },
+      });
+      return rec.id;
+    } catch (err) {
+      console.warn("[DatabaseSmartsheetService] Could not create run log:", err.message);
+      return null;
+    }
+  }
+
+  static async logScanRunEnd(runId, stats, durationMs, errorMsg) {
+    if (!runId) return;
+    let status = "success";
+    if (errorMsg) status = "error";
+    else if (stats.failed > 0) status = "partial";
+    try {
+      await prisma.costingScanRun.update({
+        where: { id: runId },
+        data: {
+          finishedAt: new Date(),
+          durationMs,
+          scanned: stats.scanned,
+          matched: stats.matched,
+          notFound: stats.notFound,
+          failed: stats.failed,
+          remaining: stats.remaining,
+          status,
+          error: errorMsg ? String(errorMsg).slice(0, 2000) : null,
+        },
+      });
+    } catch (err) {
+      console.warn("[DatabaseSmartsheetService] Could not finalize run log:", err.message);
     }
   }
 }

@@ -18,6 +18,7 @@ import {
   updateTenderEmailId,
   updateTenderEmailSubjectLine,
   updateTenderLostStillScope,
+  getCostingScanRuns,
 } from "@/actions/tenders";
 
 type SortField = keyof SmartsheetTender;
@@ -161,6 +162,7 @@ const TenderDashboardPage: React.FC = () => {
   const [costingSummary, setCostingSummary] = useState<{ matched: number; total: number } | null>(null);
   const [scanningCosting, setScanningCosting] = useState(false);
   const [scanSummary, setScanSummary] = useState<{ scanned: number; matched: number; notFound: number; total: number; remaining: number } | null>(null);
+  const [scanHistory, setScanHistory] = useState<any[]>([]);
   const [pushingQueue, setPushingQueue] = useState(false);
   const [queueSummary, setQueueSummary] = useState<{ total: number; published: number; failed: number; skippedNoUrl: number; skippedParsed: number } | null>(null);
   const [queueTestMode, setQueueTestMode] = useState(true);
@@ -862,6 +864,19 @@ const TenderDashboardPage: React.FC = () => {
     setCostingRefreshing(false);
   };
 
+  const loadScanHistory = async () => {
+    try {
+      const json = await getCostingScanRuns(15);
+      if (json.success) setScanHistory((json.data || []) as any[]);
+    } catch (err) {
+      console.error("Failed to load costing scan history:", err);
+    }
+  };
+
+  useEffect(() => {
+    loadScanHistory();
+  }, []);
+
   const handleScanCostingFiles = async () => {
     setScanningCosting(true);
     setScanSummary(null);
@@ -872,6 +887,7 @@ const TenderDashboardPage: React.FC = () => {
         return;
       }
       setScanSummary(json.scanSummary || null);
+      loadScanHistory();
     } catch (err) {
       console.error("Failed to scan costing files:", err);
     } finally {
@@ -1070,7 +1086,7 @@ const TenderDashboardPage: React.FC = () => {
           >
             {syncing ? "🔄 Syncing..." : "🔄 Refresh Data"}
           </button>
-          {/* <button
+          <button
             className="tender-refresh-sidebar-btn"
             onClick={handleRefreshCosting}
             disabled={loading || costingRefreshing}
@@ -1130,7 +1146,29 @@ const TenderDashboardPage: React.FC = () => {
             <div style={{ fontSize: 11, color: "#5f6368", marginTop: 4, textAlign: "center" }}>
               Queue: {queueSummary.published}/{queueSummary.total} logged (publish off) · skipped {queueSummary.skippedParsed} parsed / {queueSummary.skippedNoUrl} no-url
             </div>
-          )} */}
+          )}
+          {scanHistory.length > 0 && (
+            <div style={{ marginTop: 10, background: "rgba(255,255,255,0.06)", padding: 8, borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.85)", marginBottom: 6 }}>
+                COSTING SCAN HISTORY
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {scanHistory.slice(0, 10).map((r: any) => (
+                  <div key={r.id} style={{ fontSize: 10, color: "rgba(255,255,255,0.75)", lineHeight: 1.35 }}>
+                    <span style={{ opacity: 0.7 }}>
+                      {new Date(r.startedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </span>{" "}
+                    <span style={{ fontWeight: 700, color: r.status === "error" ? "#ff6b6b" : r.status === "running" ? "#ffd93d" : "#6bffb8" }}>
+                      {r.status}
+                    </span>
+                    {" · "}found {r.matched}/{r.scanned}
+                    {" · "}{r.notFound} missing{r.failed > 0 ? ` · ${r.failed} failed` : ""}
+                    {typeof r.durationMs === "number" ? ` · ${(r.durationMs / 60000).toFixed(1)} min` : ""}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </aside>
 
