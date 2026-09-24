@@ -985,7 +985,7 @@ const TenderDashboardPage: React.FC = () => {
     <div className="tender-layout-container">
       {/* ── Sidebar ───────────────────────────────────────────────────── */}
       <aside className="tender-sidebar">
-        <div className="tender-sidebar-header">📋 Tender Dashboard</div>
+        <div className="tender-sidebar-header">📋 Enquiry to Quotation</div>
         <div className="tender-sidebar-body">
 
           {/* Stats */}
@@ -1139,7 +1139,7 @@ const TenderDashboardPage: React.FC = () => {
         {/* Header */}
         <header className="tender-top-header">
           <div className="tender-header-brand">
-            <h1 className="tender-header-title">LASERPOWER <span>TENDER</span></h1>
+            <h1 className="tender-header-title">LASERPOWER <span>ENQUIRY</span></h1>
             <div className="tender-header-divider" />
             <span className="tender-header-subtitle">Smartsheet Dashboard</span>
           </div>
@@ -2111,7 +2111,7 @@ const TenderDashboardPage: React.FC = () => {
             </div>
           </div>
           <div style={{ color: "#0a2540", textTransform: "uppercase", fontWeight: 700 }}>
-            LASERPOWER TENDER SMARTSHEET PIPELINE
+            LASERPOWER ENQUIRY SMARTSHEET PIPELINE
           </div>
           <div style={{ display: "flex", gap: 12 }}>
             <span style={{ backgroundColor: "#e1e6eb", color: "#0a2540", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>

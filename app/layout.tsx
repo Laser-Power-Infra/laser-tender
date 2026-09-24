@@ -3,7 +3,7 @@ import "./globals.css";
 import { TabNav } from "@/components/TabNav";
 
 export const metadata: Metadata = {
-  title: "LaserPower Tender Dashboard",
+  title: "LASERPOWER ENQUIRY Dashboard",
   description: "Enquiry to Quotation Dashboard",
 };
 
