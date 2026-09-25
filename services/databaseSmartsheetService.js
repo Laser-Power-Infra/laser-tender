@@ -552,7 +552,7 @@ export class DatabaseSmartsheetService {
    * not yet have an attachment URL, and stores the found file as an encrypted
    * "ENC1." value wrapping "network|<relative-path>". Plain URLs are untouched.
    */
-  static async scanAndUpdateCostingFiles(limit = 100) {
+  static async scanAndUpdateCostingFiles(limit = 2000) {
     if (!prisma) {
       return { success: false, reason: "Prisma client unavailable" };
     }
