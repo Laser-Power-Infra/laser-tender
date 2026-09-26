@@ -8,6 +8,10 @@ import { ColumnFilter } from "@/components/ColumnFilter";
 type SortField = keyof SalesContract;
 type SortDir = "asc" | "desc";
 
+// Sentinel option value shown in every column filter dropdown. Selecting it
+// filters the column's blank/empty cells.
+const BLANK = "(Blank)";
+
 interface ColDef {
   key: SortField;
   label: string;
@@ -235,6 +239,7 @@ const SalesContractPage: React.FC = () => {
       if (selected.length > 0) {
         r = r.filter(row => {
           const v = displayValue(row, key);
+          if (selected.includes(BLANK) && v === "") return true;
           return v !== "" && selected.includes(v);
         });
       }
@@ -297,10 +302,15 @@ const SalesContractPage: React.FC = () => {
     allFilterKeys.forEach(key => {
       const base = applyAllFilters(data, [key]);
       const set = new Set<string>();
+      // "(Blank)" is only offered when the column actually has blank cells in the
+      // cascaded rows, so it cascades like any other option.
+      let hasBlank = false;
       base.forEach(row => {
         const v = displayValue(row, key);
         if (v !== "") set.add(v);
+        else hasBlank = true;
       });
+      if (hasBlank) set.add(BLANK);
       map[key] = Array.from(set).sort();
     });
     return map;

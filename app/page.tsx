@@ -24,6 +24,11 @@ import {
 type SortField = keyof SmartsheetTender;
 type SortDir = "asc" | "desc";
 
+// Sentinel option value shown in every column filter dropdown. Selecting it
+// filters the column's blank/empty cells. Kept as a plain string so it rides
+// through the existing MultiSelectDropdown/ColumnFilter as a normal option.
+const BLANK = "(Blank)";
+
 interface ColDef {
   key: SortField;
   label: string;
@@ -559,14 +564,16 @@ const TenderDashboardPage: React.FC = () => {
           const val = (row.docketNumber && allocatedToOverrides.hasOwnProperty(row.docketNumber))
             ? allocatedToOverrides[row.docketNumber]
             : row.allocatedTo;
-          if (selected.includes("(blank)") && !val) return true;
-          return val && selected.includes(val.trim());
+          const t = val?.trim();
+          if (selected.includes(BLANK) && !t) return true;
+          return !!t && selected.includes(t);
         });
         return;
       }
 
       if (key === "proposedErpItemName") {
         rows = rows.filter(row => {
+          if (selected.includes(BLANK) && !row.proposedErpItemName) return true;
           if (!row.proposedErpItemName) return false;
           const rowItems = row.proposedErpItemName.split(/\n+/).map(p => p.trim()).filter(Boolean);
           return rowItems.some(item => selected.includes(item));
@@ -586,6 +593,7 @@ const TenderDashboardPage: React.FC = () => {
             { label: "Steel", price: row.galvanisedSteelFlatStripPrice },
             { label: "Filler", price: row.fillerPrice }
           ].filter(m => m.price !== null && m.price !== undefined && m.price !== 0);
+          if (selected.includes(BLANK) && activeRates.length === 0) return true;
           return activeRates.some(m => selected.includes(m.label));
         });
         return;
@@ -602,7 +610,7 @@ const TenderDashboardPage: React.FC = () => {
       if (key === "LostStillScope") {
         rows = rows.filter(row => {
           const v = getEffectiveLostStillScope(row, lostStillScopeOverrides);
-          if (selected.includes("(blank)") && v === "") return true;
+          if (selected.includes(BLANK) && v === "") return true;
           return v !== "" && selected.includes(v);
         });
         return;
@@ -610,6 +618,7 @@ const TenderDashboardPage: React.FC = () => {
 
       rows = rows.filter(row => {
         const v = cellText(row, key);
+        if (selected.includes(BLANK) && v === "") return true;
         return v !== "" && selected.includes(v);
       });
     });
@@ -687,6 +696,10 @@ const TenderDashboardPage: React.FC = () => {
     COLUMNS.forEach(col => {
       const key = col.key;
       const set = new Set<string>();
+      // "(Blank)" is only offered when the column actually has blank cells in the
+      // cascaded rows, so it cascades like any other option. attachmentUrl already
+      // has "Has/No Attachment", so it never shows "(Blank)".
+      let hasBlank = false;
       const rows = applyFilters(data, [key]);
       rows.forEach(r => {
         if (key === "proposedErpItemName" && r.proposedErpItemName) {
@@ -707,7 +720,8 @@ const TenderDashboardPage: React.FC = () => {
             { label: "Steel", price: r.galvanisedSteelFlatStripPrice },
             { label: "Filler", price: r.fillerPrice }
           ].filter(m => m.price !== null && m.price !== undefined && m.price !== 0);
-          activeRates.forEach(m => set.add(m.label));
+          if (activeRates.length > 0) activeRates.forEach(m => set.add(m.label));
+          else hasBlank = true;
           return;
         }
         if (key === "allocatedTo") {
@@ -715,7 +729,7 @@ const TenderDashboardPage: React.FC = () => {
             ? allocatedToOverrides[r.docketNumber]
             : r.allocatedTo;
           if (val?.trim()) set.add(val.trim());
-          else set.add("(blank)");
+          else hasBlank = true;
           return;
         }
         if (key === "attachmentUrl") {
@@ -725,12 +739,14 @@ const TenderDashboardPage: React.FC = () => {
         if (key === "LostStillScope") {
           const v = getEffectiveLostStillScope(r, lostStillScopeOverrides);
           if (v) set.add(v);
-          else set.add("(blank)");
+          else hasBlank = true;
           return;
         }
         const v = cellText(r, key);
         if (v !== "") set.add(v);
+        else hasBlank = true;
       });
+      if (hasBlank) set.add(BLANK);
       map[key] = Array.from(set).sort();
     });
     return map;
