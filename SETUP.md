@@ -1,16 +1,22 @@
-# Nightly Costing-File Scan — Server Setup
+# Nightly Costing Job — Server Setup
 
-This guide sets up the **scheduled nightly costing-file scan** on the Windows server
+This guide sets up the **scheduled nightly costing job** on the Windows server
 `192.168.1.190` (which hosts the codebase and the PostgreSQL DB).
 
-The scan reuses the existing script `scripts/scanCostingFiles.mjs`: it reads dockets
-that have **no** `attachmentUrl` from the `SmartsheetTender` table, recursively searches
-the costing network folder, and stores the matching Excel file path (encrypted) back in
-the DB.
+The job runs two steps, in order:
 
-Every run is recorded in the new **`CostingScanRun`** table and shown on the dashboard
-(sidebar → "COSTING SCAN HISTORY"): how many dockets were searched, how many files were
-found, not found, failed, duration and status.
+1. **Google Sheet costing sync** — calls the app's `/api/costing/refresh` endpoint
+   (the same logic as the "Costing from sheet" button, `refreshCostingData`). It reads
+   the "TENDER COSTING ATTACHMENT" Google Sheet and stores each docket's
+   `attachmentUrl` from the sheet in the DB.
+2. **Network costing-file search** — runs `scripts/scanCostingFiles.mjs`: it reads
+   dockets that still have **no** `attachmentUrl` from the `SmartsheetTender` table,
+   recursively searches the costing network folder, and stores the matching Excel file
+   path (encrypted) back in the DB.
+
+Every network scan run is recorded in the **`CostingScanRun`** table and shown on the
+dashboard (sidebar → "COSTING SCAN HISTORY"): how many dockets were searched, how many
+files were found, not found, failed, duration and status.
 
 ---
 
@@ -50,6 +56,13 @@ Make sure these exist (values should match what the running app uses):
 | `COSTING_PATH_ENCRYPTION_KEY` | **MUST be identical** to the key already used on other machines. Existing encrypted paths in the DB were encrypted with this key; if it differs, decrypting old records and the dashboard download will break. |
 | `COSTING_NIGHTLY_SCAN_LIMIT` | dockets to search per run (e.g. `500`). **Set this** so each night finishes in time (see below). |
 | `COSTING_SCAN_RETRY_DAYS` | optional; how many days before a docket that was searched but not found is retried (default `7`). |
+| `WORKER_API_KEY` | **required for step 1.** Sent by the trigger script as `x-api-key` to the app's `/api/costing/refresh`. |
+| `COSTING_SYNC_APP_URL` | optional; base URL of the running app used by the trigger script (default `http://localhost:4173`). |
+| `GOOGLE_CLIENT_EMAIL` / `GOOGLE_PRIVATE_KEY` | **required for step 1.** These live in the **app's** env (`.env.production` for Docker); the running app needs them to read the Google Sheet. |
+
+> **Step 1 needs the app running.** The sheet sync is triggered via the running app at
+> `COSTING_SYNC_APP_URL` (default `http://localhost:4173`). If the app is down, step 1
+> logs a failure but the network scan (step 2) still proceeds.
 
 > **Why a limit is needed:** searching one docket can take 30–60s (it walks the costing
 > tree recursively). Scanning all ~1,778 missing dockets in one go would run 10–20h. The
@@ -59,10 +72,22 @@ Make sure these exist (values should match what the running app uses):
 > Found files are stored immediately; not-found dockets are retried after the retry
 > window (files often appear later).
 
-## 4. Test the scan once (manual)
+## 4. Test the job once (manual)
+
+Test step 1 (sheet sync via the app — needs the app running, e.g. dev on `:4123` or
+prod on `:4173`):
 
 ```bat
 cd /d D:\laser-tenders
+set COSTING_SYNC_APP_URL=http://localhost:4173
+node scripts/triggerCostingSheetSync.mjs
+```
+
+Expect output like `[SheetSync] OK — matched 3417/5249`.
+
+Then test step 2 (network scan):
+
+```bat
 node scripts/scanCostingFiles.mjs --limit 5
 ```
 
@@ -86,8 +111,10 @@ Then check the dashboard — "COSTING SCAN HISTORY" should show a new row.
 
 ## 5. Create the scheduled task (Windows Task Scheduler)
 
-Use the wrapper `run-costing-scan.cmd` (it `cd`s to the repo, runs the script and writes
-console output to `logs\costing-scan-console.log`).
+Use the wrapper `run-costing-scan.cmd` (it `cd`s to the repo, runs **step 1 sheet sync
+then step 2 network scan**, and writes console output to `logs\costing-scan-console.log`).
+No re-registration is needed if you already created the task — it runs this file fresh
+each time, so just deploy the updated `.cmd`.
 
 Register as **"run whether user is logged on or not"** so it runs nightly even with no
 one logged in. Set the time (`/ST`, 24-hour format) to your preferred time:
@@ -129,6 +156,14 @@ schtasks /Run /TN "LaserTender_CostingScan"
 
 ## Troubleshooting
 
+- **`[SheetSync] Request failed: ...`** → the app isn't reachable at
+  `COSTING_SYNC_APP_URL` (default `http://localhost:4173`). Confirm the app is running
+  and the port is right.
+- **`[SheetSync] ... reported failure` / HTTP 401** → `WORKER_API_KEY` in the repo `.env`
+  doesn't match the app's `WORKER_API_KEY`.
+- **Sheet sync returns `matched 0`** → the running app lacks the Google creds
+  (`GOOGLE_CLIENT_EMAIL` / `GOOGLE_PRIVATE_KEY`) in its env, or it has no network access
+  to `sheets.googleapis.com`. The network scan step still runs.
 - **`[CostingFileFinder] Network path not accessible: ...`** → the task's account cannot
   reach the share. Use the UNC path in `COSTING_FILE_NETWORK_PATH` and confirm the task
   user has read access to `\\192.168.1.242\dipankar roy`.
