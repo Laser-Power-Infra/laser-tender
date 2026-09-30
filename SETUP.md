@@ -3,7 +3,7 @@
 This guide sets up the **scheduled nightly costing job** on the Windows server
 `192.168.1.190` (which hosts the codebase and the PostgreSQL DB).
 
-The job runs two steps, in order:
+The job runs three steps, in order:
 
 1. **Google Sheet costing sync** — calls the app's `/api/costing/refresh` endpoint
    (the same logic as the "Costing from sheet" button, `refreshCostingData`). It reads
@@ -13,6 +13,9 @@ The job runs two steps, in order:
    dockets that still have **no** `attachmentUrl` from the `SmartsheetTender` table,
    recursively searches the costing network folder, and stores the matching Excel file
    path (encrypted) back in the DB.
+3. **Queue push** — runs `scripts/pushCostingToQueue.mjs`: it publishes a
+   `COSTING_ATTACHMENT_PARSING` task per docket (with an attachment URL and no parsed
+   costing yet) to RabbitMQ queue `tender:parsing`.
 
 Every network scan run is recorded in the **`CostingScanRun`** table and shown on the
 dashboard (sidebar → "COSTING SCAN HISTORY"): how many dockets were searched, how many
@@ -59,10 +62,14 @@ Make sure these exist (values should match what the running app uses):
 | `WORKER_API_KEY` | **required for step 1.** Sent by the trigger script as `x-api-key` to the app's `/api/costing/refresh`. |
 | `COSTING_SYNC_APP_URL` | optional; base URL of the running app used by the trigger script (default `http://localhost:4173`). |
 | `GOOGLE_CLIENT_EMAIL` / `GOOGLE_PRIVATE_KEY` | **required for step 1.** These live in the **app's** env (`.env.production` for Docker); the running app needs them to read the Google Sheet. |
+| `RABBITMQ_URL` | **required for step 3.** e.g. `amqp://guest:guest@192.168.1.190:5672` — the queue push publishes `tender:parsing` tasks here. |
 
 > **Step 1 needs the app running.** The sheet sync is triggered via the running app at
 > `COSTING_SYNC_APP_URL` (default `http://localhost:4173`). If the app is down, step 1
-> logs a failure but the network scan (step 2) still proceeds.
+> logs a failure but steps 2 and 3 still proceed.
+>
+> **Step 3 publishes real tasks.** Dockets that are already parsed (have `cvaValue` /
+> `proposedQty`) are skipped, so re-running it nightly is safe.
 
 > **Why a limit is needed:** searching one docket can take 30–60s (it walks the costing
 > tree recursively). Scanning all ~1,778 missing dockets in one go would run 10–20h. The
@@ -105,14 +112,34 @@ Remaining  : 1775
 
 Then check the dashboard — "COSTING SCAN HISTORY" should show a new row.
 
+Then test step 3 (queue push — publishes to RabbitMQ):
+
+```bat
+node scripts/pushCostingToQueue.mjs --limit 5
+```
+
+Expect output like:
+
+```
+[QueuePush] 5 eligible (3417 no-url, 1827 already parsed)
+[QueuePush] Connecting to RabbitMQ...
+[QueuePush] ── SUMMARY ──
+Eligible         : 5
+Published        : 5
+Failed           : 0
+Skipped (no URL) : 3417
+Skipped (parsed) : 1827
+```
+
 > Each searched docket sets its `costingScanAttemptedAt`. Not-found dockets are retried
 > after `COSTING_SCAN_RETRY_DAYS` (default 7), so leave the nightly job running even
 > after a backfill — new tenders arrive from Smartsheet and files appear over time.
 
 ## 5. Create the scheduled task (Windows Task Scheduler)
 
-Use the wrapper `run-costing-scan.cmd` (it `cd`s to the repo, runs **step 1 sheet sync
-then step 2 network scan**, and writes console output to `logs\costing-scan-console.log`).
+Use the wrapper `run-costing-scan.cmd` (it `cd`s to the repo, runs **step 1 sheet sync,
+step 2 network scan, step 3 queue push**, and writes console output to
+`logs\costing-scan-console.log`).
 No re-registration is needed if you already created the task — it runs this file fresh
 each time, so just deploy the updated `.cmd`.
 
@@ -156,6 +183,9 @@ schtasks /Run /TN "LaserTender_CostingScan"
 
 ## Troubleshooting
 
+- **`[QueuePush] RABBITMQ_URL is not set` / connect failure** → ensure `RABBITMQ_URL`
+  is in the repo `.env` and RabbitMQ is reachable (e.g. `192.168.1.190:5672`). Step 3
+  is skipped on failure but steps 1–2 still run.
 - **`[SheetSync] Request failed: ...`** → the app isn't reachable at
   `COSTING_SYNC_APP_URL` (default `http://localhost:4173`). Confirm the app is running
   and the port is right.
