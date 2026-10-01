@@ -91,35 +91,46 @@ console.log(`[CostingParsed] Updating docket ${docket} with fields:`, fields);
 
       // 2) ILIKE fallback: the worker often sends only the middle number
       //    (e.g. "18888-25-26" or "18884") instead of the full "ENQ-18888-25-26".
+      //    Only consider tokens that are exactly 5 digits so a wrong partial
+      //    never ILIKE-matches unrelated rows.
       try {
-        const tokens = [docket];
         const numeric = extractNumericDocket(docket);
-        if (numeric && numeric !== docket) tokens.push(numeric);
+        const tokens = Array.from(
+          new Set(
+            [docket, numeric].filter(
+              (t): t is string => !!t && /^\d{5}$/.test(t)
+            )
+          )
+        );
 
-        let matched: { id: string; docketNumber: string | null } | null = null;
-        for (const token of tokens) {
-          const rec = await prisma.smartsheetTender.findFirst({
-            where: { docketNumber: { contains: token, mode: "insensitive" } },
-            orderBy: { createdAt: "desc" },
-            select: { id: true, docketNumber: true },
-          });
-          if (rec) {
-            matched = rec;
-            break;
-          }
-        }
-
-        if (!matched) {
+        if (tokens.length === 0) {
           result = { success: false, found: false, error: "Record not found" };
         } else {
-          await prisma.smartsheetTender.update({
-            where: { id: matched.id },
-            data: { ...fields, lastSyncedAt: new Date() },
-          });
-          console.log(
-            `[CostingParsed] Docket "${docket}" matched via ILIKE to "${matched.docketNumber}"`
-          );
-          result = { success: true, found: true, docketNumber: matched.docketNumber ?? docket };
+          let matched: { id: string; docketNumber: string | null } | null = null;
+          for (const token of tokens) {
+            const rec = await prisma.smartsheetTender.findFirst({
+              where: { docketNumber: { contains: token, mode: "insensitive" } },
+              orderBy: { createdAt: "desc" },
+              select: { id: true, docketNumber: true },
+            });
+            if (rec) {
+              matched = rec;
+              break;
+            }
+          }
+
+          if (!matched) {
+            result = { success: false, found: false, error: "Record not found" };
+          } else {
+            await prisma.smartsheetTender.update({
+              where: { id: matched.id },
+              data: { ...fields, lastSyncedAt: new Date() },
+            });
+            console.log(
+              `[CostingParsed] Docket "${docket}" matched via ILIKE to "${matched.docketNumber}"`
+            );
+            result = { success: true, found: true, docketNumber: matched.docketNumber ?? docket };
+          }
         }
       } catch (fallbackErr) {
         console.error(
