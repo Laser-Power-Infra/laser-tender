@@ -49,10 +49,12 @@ export async function POST(request: Request) {
     );
   }
 
+  let docket = "";
+
   try {
     const record = body as Record<string, unknown>;
 
-    const docket = typeof record.docketNo === "string" ? record.docketNo.trim() : "";
+    docket = typeof record.docketNo === "string" ? record.docketNo.trim() : "";
     if (!docket) {
       return NextResponse.json(
         { success: false, error: "docketNo is required" },
@@ -89,34 +91,42 @@ console.log(`[CostingParsed] Updating docket ${docket} with fields:`, fields);
 
       // 2) ILIKE fallback: the worker often sends only the middle number
       //    (e.g. "18888-25-26" or "18884") instead of the full "ENQ-18888-25-26".
-      const tokens = [docket];
-      const numeric = extractNumericDocket(docket);
-      if (numeric && numeric !== docket) tokens.push(numeric);
+      try {
+        const tokens = [docket];
+        const numeric = extractNumericDocket(docket);
+        if (numeric && numeric !== docket) tokens.push(numeric);
 
-      let matched: { id: string; docketNumber: string | null } | null = null;
-      for (const token of tokens) {
-        const rec = await prisma.smartsheetTender.findFirst({
-          where: { docketNumber: { contains: token, mode: "insensitive" } },
-          orderBy: { createdAt: "desc" },
-          select: { id: true, docketNumber: true },
-        });
-        if (rec) {
-          matched = rec;
-          break;
+        let matched: { id: string; docketNumber: string | null } | null = null;
+        for (const token of tokens) {
+          const rec = await prisma.smartsheetTender.findFirst({
+            where: { docketNumber: { contains: token, mode: "insensitive" } },
+            orderBy: { createdAt: "desc" },
+            select: { id: true, docketNumber: true },
+          });
+          if (rec) {
+            matched = rec;
+            break;
+          }
         }
-      }
 
-      if (!matched) {
-        result = { success: false, found: false, error: "Record not found" };
-      } else {
-        await prisma.smartsheetTender.update({
-          where: { id: matched.id },
-          data: { ...fields, lastSyncedAt: new Date() },
-        });
-        console.log(
-          `[CostingParsed] Docket "${docket}" matched via ILIKE to "${matched.docketNumber}"`
+        if (!matched) {
+          result = { success: false, found: false, error: "Record not found" };
+        } else {
+          await prisma.smartsheetTender.update({
+            where: { id: matched.id },
+            data: { ...fields, lastSyncedAt: new Date() },
+          });
+          console.log(
+            `[CostingParsed] Docket "${docket}" matched via ILIKE to "${matched.docketNumber}"`
+          );
+          result = { success: true, found: true, docketNumber: matched.docketNumber ?? docket };
+        }
+      } catch (fallbackErr) {
+        console.error(
+          `[CostingParsed] ILIKE fallback error for docket "${docket}":`,
+          fallbackErr
         );
-        result = { success: true, found: true, docketNumber: matched.docketNumber ?? docket };
+        throw fallbackErr;
       }
     }
     if (result.success && result.found) {
@@ -136,9 +146,16 @@ console.log(`[CostingParsed] Updating docket ${docket} with fields:`, fields);
       { status: 200 }
     );
   } catch (err) {
-    console.error("[CostingParsed] Error:", err);
+    console.error(
+      `[CostingParsed] Error for docket "${typeof docket === "string" ? docket : ""}":`,
+      err
+    );
     return NextResponse.json(
-      { success: false, error: err instanceof Error ? err.message : "Unexpected server error" },
+      {
+        success: false,
+        error: err instanceof Error ? err.message : "Unexpected server error",
+        retryable: true,
+      },
       { status: 500 }
     );
   }
