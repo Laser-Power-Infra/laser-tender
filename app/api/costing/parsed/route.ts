@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { DatabaseSmartsheetService } from "@/services/databaseSmartsheetService";
 import { mapRecord } from "@/lib/costingMapping.mjs";
+import { extractNumericDocket } from "@/services/costingFileFinder.mjs";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -71,26 +71,54 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log(`[CostingParsed] Updating docket ${docket} with fields:`, fields);
+console.log(`[CostingParsed] Updating docket ${docket} with fields:`, fields);
 
-    // const result = await DatabaseSmartsheetService.updateTenderCostingFields(docket, fields);
-    let result: { success: boolean; found: boolean; error?: string } = { success: false, found: false };
-     if (!prisma) {
-          result= {success: false, found: false, error: "Prisma client unavailable"} ;
+    // 1) Exact match on the full docket number.
+    let result: { success: boolean; found: boolean; error?: string; docketNumber?: string };
+    try {
+      await prisma.smartsheetTender.update({
+        where: { docketNumber: docket },
+        data: { ...fields, lastSyncedAt: new Date() },
+      });
+      result = { success: true, found: true, docketNumber: docket };
+    } catch (err: any) {
+      // P2025 = record not found → try a case-insensitive (ILIKE) partial match.
+      if (err?.code !== "P2025") {
+        throw err;
+      }
+
+      // 2) ILIKE fallback: the worker often sends only the middle number
+      //    (e.g. "18888-25-26" or "18884") instead of the full "ENQ-18888-25-26".
+      const tokens = [docket];
+      const numeric = extractNumericDocket(docket);
+      if (numeric && numeric !== docket) tokens.push(numeric);
+
+      let matched: { id: string; docketNumber: string | null } | null = null;
+      for (const token of tokens) {
+        const rec = await prisma.smartsheetTender.findFirst({
+          where: { docketNumber: { contains: token, mode: "insensitive" } },
+          orderBy: { createdAt: "desc" },
+          select: { id: true, docketNumber: true },
+        });
+        if (rec) {
+          matched = rec;
+          break;
         }
-        try {
-          await prisma.smartsheetTender.update({
-            where: { docketNumber: docket },
-            data: { ...fields, lastSyncedAt: new Date() },
-          });
-          result = { success: true, found: true };
-        } catch (err) {
-          // P2025 = record not found
-          if (err ) {
-            result = { success: false, found: false, error: "Record not found" };
-          }
-          result = { success: false, found: false, error: err instanceof Error ? err.message : "Unexpected error" };
-        }
+      }
+
+      if (!matched) {
+        result = { success: false, found: false, error: "Record not found" };
+      } else {
+        await prisma.smartsheetTender.update({
+          where: { id: matched.id },
+          data: { ...fields, lastSyncedAt: new Date() },
+        });
+        console.log(
+          `[CostingParsed] Docket "${docket}" matched via ILIKE to "${matched.docketNumber}"`
+        );
+        result = { success: true, found: true, docketNumber: matched.docketNumber ?? docket };
+      }
+    }
     if (result.success && result.found) {
       return NextResponse.json(
         { success: true, updated: 1, skipped: 0, notFound: [], docketNumber: docket },
