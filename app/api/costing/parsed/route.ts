@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { DatabaseSmartsheetService } from "@/services/databaseSmartsheetService";
 import { mapRecord } from "@/lib/costingMapping.mjs";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -72,7 +73,24 @@ export async function POST(request: Request) {
 
     console.log(`[CostingParsed] Updating docket ${docket} with fields:`, fields);
 
-    const result = await DatabaseSmartsheetService.updateTenderCostingFields(docket, fields);
+    // const result = await DatabaseSmartsheetService.updateTenderCostingFields(docket, fields);
+    let result: { success: boolean; found: boolean; error?: string } = { success: false, found: false };
+     if (!prisma) {
+          result= {success: false, found: false, error: "Prisma client unavailable"} ;
+        }
+        try {
+          await prisma.smartsheetTender.update({
+            where: { docketNumber: docket },
+            data: { ...fields, lastSyncedAt: new Date() },
+          });
+          result = { success: true, found: true };
+        } catch (err) {
+          // P2025 = record not found
+          if (err ) {
+            result = { success: false, found: false, error: "Record not found" };
+          }
+          result = { success: false, found: false, error: err instanceof Error ? err.message : "Unexpected error" };
+        }
     if (result.success && result.found) {
       return NextResponse.json(
         { success: true, updated: 1, skipped: 0, notFound: [], docketNumber: docket },

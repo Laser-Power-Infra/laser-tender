@@ -3,7 +3,7 @@
 This guide sets up the **scheduled nightly costing job** on the Windows server
 `192.168.1.190` (which hosts the codebase and the PostgreSQL DB).
 
-The job runs three steps, in order:
+The job runs four steps, in order:
 
 1. **Google Sheet costing sync** — calls the app's `/api/costing/refresh` endpoint
    (the same logic as the "Costing from sheet" button, `refreshCostingData`). It reads
@@ -16,10 +16,14 @@ The job runs three steps, in order:
 3. **Queue push** — runs `scripts/pushCostingToQueue.mjs`: it publishes a
    `COSTING_ATTACHMENT_PARSING` task per docket (with an attachment URL and no parsed
    costing yet) to RabbitMQ queue `tender:parsing`.
+4. **Nightly breakdown report** — runs `scripts/costingJobReport.mjs`: it counts the
+   post-job state — total tenders, network attachments (ENC1.), AppSheet/Drive URLs
+   (http), dockets with no attachment, and dockets already parsed.
 
-Every network scan run is recorded in the **`CostingScanRun`** table and shown on the
-dashboard (sidebar → "COSTING SCAN HISTORY"): how many dockets were searched, how many
-files were found, not found, failed, duration and status.
+Every network-scan run (step 2) **and** the nightly breakdown (step 4) are recorded in
+the **`CostingScanRun`** table and shown on the dashboard (sidebar → "COSTING SCAN
+HISTORY"). Scan rows show searched/found/missing; "nightly" rows show
+`Net · Sheet · none · parsed`.
 
 ---
 
@@ -135,11 +139,28 @@ Skipped (parsed) : 1827
 > after `COSTING_SCAN_RETRY_DAYS` (default 7), so leave the nightly job running even
 > after a backfill — new tenders arrive from Smartsheet and files appear over time.
 
+Then test step 4 (nightly breakdown report):
+
+```bat
+node scripts/costingJobReport.mjs
+```
+
+Expect output like:
+
+```
+[JobReport] ── NIGHTLY COSTING BREAKDOWN ──
+Total tenders        : 5293
+Network attachments  : 25
+AppSheet/Drive URLs  : 3652
+No attachment        : 1616
+Parsed costing       : 3553
+```
+
 ## 5. Create the scheduled task (Windows Task Scheduler)
 
 Use the wrapper `run-costing-scan.cmd` (it `cd`s to the repo, runs **step 1 sheet sync,
-step 2 network scan, step 3 queue push**, and writes console output to
-`logs\costing-scan-console.log`).
+step 2 network scan, step 3 queue push, step 4 breakdown report**, and writes console
+output to `logs\costing-scan-console.log`).
 No re-registration is needed if you already created the task — it runs this file fresh
 each time, so just deploy the updated `.cmd`.
 
@@ -174,8 +195,9 @@ schtasks /Run /TN "LaserTender_CostingScan"
 
 ## 6. Check the reports
 
-- **Dashboard**: side panel → "COSTING SCAN HISTORY" lists the last 15 runs
-  (status, found/matched, missing, failed, duration).
+- **Dashboard**: side panel → "COSTING SCAN HISTORY" lists the last 15 runs. Scan rows
+  show status, found/matched, missing, failed, duration. "nightly" rows show
+  `Net · Sheet · none · parsed` (network / AppSheet-Drive / no-attachment / parsed).
 - **Console log**: `D:\laser-tenders\logs\costing-scan-console.log` — full output of
   every run, including the summary and any errors.
 
