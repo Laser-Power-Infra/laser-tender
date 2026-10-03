@@ -31,7 +31,10 @@ export async function POST(request: Request) {
   }
 
   try {
+    const startedAt = Date.now();
+    console.log("[CostingRefresh] Request received");
     const result = await refreshCostingData();
+    console.log(`[CostingRefresh] Response sent in ${((Date.now() - startedAt) / 1000).toFixed(1)}s — matched ${result.matchedCount}/${result.totalCount}`);
     return NextResponse.json({
       success: true,
       matched: result.matchedCount,

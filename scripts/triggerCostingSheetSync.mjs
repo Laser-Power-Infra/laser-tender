@@ -48,6 +48,7 @@ async function main() {
 
   const url = `${appUrl}/api/costing/refresh`;
   console.log(`[SheetSync] POST ${url}`);
+  const startedAt = Date.now();
 
   let response;
   try {
@@ -59,28 +60,28 @@ async function main() {
       },
     });
   } catch (err) {
-    console.error(`[SheetSync] Request failed: ${err.message}`);
+    console.error(`[SheetSync] FAILED: request error: ${err.message}`);
     process.exit(1);
   }
 
   const text = await response.text();
-  console.log(`[SheetSync] status=${response.status} body=${text.slice(0, 2000)}`);
+  console.log(`[SheetSync] status=${response.status} body=${text.slice(0, 2000)} (${((Date.now() - startedAt) / 1000).toFixed(1)}s)`);
 
   if (!response.ok) {
-    console.error(`[SheetSync] Refresh failed (HTTP ${response.status})`);
+    console.error(`[SheetSync] FAILED: HTTP ${response.status} — ${text.slice(0, 500)}`);
     process.exit(1);
   }
 
   try {
     const json = JSON.parse(text);
     if (json && json.success === true) {
-      console.log(`[SheetSync] OK — matched ${json.matched}/${json.total}`);
+      console.log(`[SheetSync] OK — matched ${json.matched}/${json.total} in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
     } else {
-      console.error(`[SheetSync] Refresh reported failure: ${text.slice(0, 500)}`);
+      console.error(`[SheetSync] FAILED: ${text.slice(0, 500)}`);
       process.exit(1);
     }
   } catch (err) {
-    console.error(`[SheetSync] Non-JSON response: ${text.slice(0, 500)}`);
+    console.error(`[SheetSync] FAILED: non-JSON response: ${text.slice(0, 500)}`);
     process.exit(1);
   }
 }

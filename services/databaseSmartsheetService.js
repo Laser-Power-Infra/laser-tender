@@ -393,9 +393,16 @@ export class DatabaseSmartsheetService {
     const BATCH_SIZE = 100;
     let inserted = 0;
     let updated = 0;
+    let failed = 0;
     const insertedLog = [];
     const updatedLog = [];
     const MAX_LOG = 20;
+
+    const startedAtMs = Date.now();
+    const totalBatches = Math.ceil(validRecords.length / BATCH_SIZE);
+    console.log(
+      `[SmartsheetSync] Upserting ${validRecords.length} records in ${totalBatches} batches (size ${BATCH_SIZE})`
+    );
 
     // For Option A: contactNo/emailId/emailSubjectLine fill nulls only — need existing values map
     const existingForEditable = await prisma.smartsheetTender.findMany({ select: { docketNumber: true, contactNo: true, emailId: true, emailSubjectLine: true } });
@@ -404,6 +411,9 @@ export class DatabaseSmartsheetService {
 
     for (let i = 0; i < validRecords.length; i += BATCH_SIZE) {
       const batch = validRecords.slice(i, i + BATCH_SIZE);
+      const batchStartedMs = Date.now();
+      const batchNo = Math.floor(i / BATCH_SIZE) + 1;
+      console.log(`[SmartsheetSync] Batch ${batchNo}/${totalBatches} (${i + 1}..${i + batch.length}) — start`);
       const ops = batch.map(record => {
         const docketKey = record.docketNumber.trim();
         const commonData = {
@@ -469,7 +479,7 @@ export class DatabaseSmartsheetService {
         if (gssp !== null) updateData.galvanisedSteelFlatStripPrice = gssp;
         const fp = cleanFloat(record.fillerPrice);
         if (fp !== null) updateData.fillerPrice = fp;
-        return { docketKey, partyName: record.partyName, promise: prisma.smartsheetTender.upsert({
+        return { docketKey, partyName: record.partyName, record, createData, updateData, promise: prisma.smartsheetTender.upsert({
           where: { docketNumber: docketKey },
           create: createData,
           update: updateData,
@@ -477,7 +487,37 @@ export class DatabaseSmartsheetService {
       });
 
       const withPromises = ops.map(op => op.promise);
-      const results = await prisma.$transaction(withPromises, { maxWait: 5000, timeout: 30000 });
+      let results;
+      try {
+        results = await prisma.$transaction(withPromises, { maxWait: 5000, timeout: 30000 });
+      } catch (txErr) {
+        // One bad/slow batch must not abort the whole sync. Log the failing
+        // batch + dockets, then fall back to per-row upserts.
+        const batchDockets = ops.map((op) => op.docketKey).join(", ");
+        console.error(
+          `[SmartsheetSync] Batch ${batchNo}/${totalBatches} FAILED (${Date.now() - batchStartedMs}ms):`,
+          txErr instanceof Error ? txErr.message : txErr
+        );
+        console.error(`[SmartsheetSync]   Failing batch dockets: ${batchDockets}`);
+        results = [];
+        for (const op of ops) {
+          try {
+            await prisma.smartsheetTender.upsert({
+              where: { docketNumber: op.docketKey },
+              create: op.createData,
+              update: op.updateData,
+            });
+            updated++;
+          } catch (rowErr) {
+            failed++;
+            console.error(
+              `[SmartsheetSync]   Row FAILED ${op.docketKey}:`,
+              rowErr instanceof Error ? rowErr.message : rowErr
+            );
+          }
+        }
+      }
+
       for (let j = 0; j < results.length; j++) {
         const r = results[j];
         const op = ops[j];
@@ -490,6 +530,10 @@ export class DatabaseSmartsheetService {
         }
       }
 
+      console.log(
+        `[SmartsheetSync] Batch ${batchNo}/${totalBatches} — done in ${Date.now() - batchStartedMs}ms`
+      );
+
       const progress = Math.min(i + BATCH_SIZE, validRecords.length);
       process.stdout.write(`\r[SmartsheetSync] Processing ${progress}/${validRecords.length}`);
     }
@@ -497,10 +541,12 @@ export class DatabaseSmartsheetService {
     console.log("");
     if (insertedLog.length > 0) console.log(`[SmartsheetSync]  INSERTED (${inserted}): ${insertedLog.join(", ")}${inserted > MAX_LOG ? ` +${inserted - MAX_LOG} more` : ""}`);
     if (updatedLog.length > 0) console.log(`[SmartsheetSync]  UPDATED  (${updated}): ${updatedLog.join(", ")}${updated > MAX_LOG ? ` +${updated - MAX_LOG} more` : ""}`);
+    if (failed > 0) console.error(`[SmartsheetSync]  FAILED    (${failed}): rows that could not be written`);
     if (inserted === 0 && updated === 0) console.log(`[SmartsheetSync]  No changes (all ${validRecords.length} records matched existing)`);
+    console.log(`[SmartsheetSync] Done in ${((Date.now() - startedAtMs) / 1000).toFixed(1)}s`);
 
-    const skipped = validRecords.length - inserted - updated;
-    return { success: true, inserted, updated, skipped };
+    const skipped = validRecords.length - inserted - updated - failed;
+    return { success: true, inserted, updated, skipped, failed };
   }
 
   /**
