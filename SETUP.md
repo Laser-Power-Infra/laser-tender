@@ -198,8 +198,15 @@ schtasks /Run /TN "LaserTender_CostingScan"
 - **Dashboard**: side panel → "COSTING SCAN HISTORY" lists the last 15 runs. Scan rows
   show status, found/matched, missing, failed, duration. "nightly" rows show
   `Net · Sheet · none · parsed` (network / AppSheet-Drive / no-attachment / parsed).
-- **Console log**: `D:\laser-tenders\logs\costing-scan-console.log` — full output of
-  every run, including the summary and any errors.
+- **Logs** (in `D:\laser-tenders\logs\`):
+  - `costing-scan-console.log` — master timeline: STEP banners + each step's full
+    output, accumulating every run.
+  - `costing-sheet-sync.log` — step 1 (latest run only).
+  - `costing-network-scan.log` — step 2 (latest run only).
+  - `costing-queue-push.log` — step 3 (latest run only).
+  - `costing-job-report.log` — step 4 (latest run only).
+- **Console**: when the job runs in a visible window, each step prints
+  `===== STEP n: ... START/DONE/FAILED =====` so you can watch progress live.
 
 ---
 
