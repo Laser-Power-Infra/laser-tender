@@ -15,7 +15,8 @@ The job runs four steps, in order:
    path (encrypted) back in the DB.
 3. **Queue push** — runs `scripts/pushCostingToQueue.mjs`: it publishes a
    `COSTING_ATTACHMENT_PARSING` task per docket (with an attachment URL and no parsed
-   costing yet) to RabbitMQ queue `tender:parsing`.
+   costing yet) to RabbitMQ queue `automation-v2:parsing`, including `client_id`
+   (from `AUTOMATION_V2_CLIENT_ID`) so automation-v2 can send the webhook back.
 4. **Nightly breakdown report** — runs `scripts/costingJobReport.mjs`: it counts the
    post-job state — total tenders, network attachments (ENC1.), AppSheet/Drive URLs
    (http), dockets with no attachment, and dockets already parsed.
@@ -66,7 +67,9 @@ Make sure these exist (values should match what the running app uses):
 | `WORKER_API_KEY` | **required for step 1.** Sent by the trigger script as `x-api-key` to the app's `/api/costing/refresh`. |
 | `COSTING_SYNC_APP_URL` | optional; base URL of the running app used by the trigger script (default `http://localhost:4173`). |
 | `GOOGLE_CLIENT_EMAIL` / `GOOGLE_PRIVATE_KEY` | **required for step 1.** These live in the **app's** env (`.env.production` for Docker); the running app needs them to read the Google Sheet. |
-| `RABBITMQ_URL` | **required for step 3.** e.g. `amqp://guest:guest@192.168.1.190:5672` — the queue push publishes `tender:parsing` tasks here. |
+| `RABBITMQ_URL` | **required for step 3.** e.g. `amqp://guest:guest@192.168.1.190:5672` — the queue push publishes `automation-v2:parsing` tasks here. |
+| `AUTOMATION_V2_CLIENT_ID` | **required for webhooks.** The `whk_…` client ID from the automation-v2 `/webhooks` page. It is added to every `COSTING_ATTACHMENT_PARSING` payload; without it the job runs but no webhook is sent back. |
+| `AUTOMATION_V2_WEBHOOK_SECRET` | optional. The `whsec_…` secret used to verify inbound webhooks on `/api/costing/parsed`. When unset, signature verification is skipped (flow works but the endpoint is unauthenticated). |
 
 > **Step 1 needs the app running.** The sheet sync is triggered via the running app at
 > `COSTING_SYNC_APP_URL` (default `http://localhost:4173`). If the app is down, step 1

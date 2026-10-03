@@ -6,7 +6,7 @@
  * (pushCostingToQueue in actions/tenders.ts). Reads tenders from the DB,
  * picks those that have an attachment URL but no parsed costing yet, and
  * publishes a COSTING_ATTACHMENT_PARSING task per docket to RabbitMQ
- * (queue "tender:parsing").
+ * (queue "automation-v2:parsing").
  *
  * Intended to run AFTER the nightly network costing-file scan so files found
  * overnight get queued for parsing.
@@ -23,7 +23,7 @@ import path from "path";
 import amqp from "amqplib";
 import { decryptStoredPath, isPlainUrl } from "../services/costingFileFinder.mjs";
 
-const QUEUE_TENDER_PARSING = "tender:parsing";
+const QUEUE_TENDER_PARSING = "automation-v2:parsing";
 
 function loadEnv() {
   const envPath = path.resolve(process.cwd(), ".env");
@@ -122,6 +122,7 @@ async function main() {
 
     let published = 0;
     let failed = 0;
+    const clientId = (process.env.AUTOMATION_V2_CLIENT_ID || "").trim();
     for (const tender of eligible) {
       const stored = (tender.attachmentUrl || "").trim();
 
@@ -140,14 +141,17 @@ async function main() {
 
       if (!fileLink) continue;
 
+      // automation-v2 payload: network files use file_type:"network" +
+      // decrypted_fileId ("costing|<rel>"); external files use file_link.
       const payload = {
         type: "COSTING_ATTACHMENT_PARSING",
         referenceNo: tender.docketNumber || "",
-        file_link: fileLink,
-        decrypted_fileId: fileLink,
-        file_type: fileType,
         sender: "laser_cost",
         timestamp: Date.now(),
+        ...(clientId ? { client_id: clientId } : {}),
+        ...(fileType === "external"
+          ? { file_link: fileLink, file_type: "external" }
+          : { file_type: "network", decrypted_fileId: fileLink }),
       };
 
       const sent = channel.sendToQueue(

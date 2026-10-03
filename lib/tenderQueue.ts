@@ -4,11 +4,15 @@ import { QUEUES } from "@/lib/queueConfig";
 export type CostingAttachmentParsingPayload = {
   type: "COSTING_ATTACHMENT_PARSING";
   referenceNo: string;
-  file_link: string;
-  decrypted_fileId: string;
-  file_type: "network" | "external";
-  sender: "laser_cost";
-  timestamp: number;
+  /** Routing key for the automation-v2 webhook. Read from AUTOMATION_V2_CLIENT_ID. */
+  client_id?: string;
+  /** External (Drive/AppSheet) files use this. */
+  file_link?: string;
+  /** Network files use file_type: "network" + decrypted_fileId ("costing|<rel>"). */
+  file_type?: "network" | "external";
+  decrypted_fileId?: string;
+  sender?: "laser_cost";
+  timestamp?: number;
 };
 
 async function publishToQueue(

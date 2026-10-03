@@ -255,6 +255,8 @@ export async function pushCostingToQueue(opts?: { docketNumbers?: string[]; test
 
     const total = eligible.length;
 
+    const clientId = (process.env.AUTOMATION_V2_CLIENT_ID || "").trim();
+
     for (const tender of eligible) {
       const stored = (tender.attachmentUrl || "").trim();
 
@@ -267,7 +269,7 @@ export async function pushCostingToQueue(opts?: { docketNumbers?: string[]; test
       } else {
         const decrypted = decryptStoredPath(stored);
         if (decrypted) {
-          // Network path — decrypted relative path ("network|...").
+          // Network path — decrypted relative path ("costing|...").
           fileLink = decrypted;
           fileType = "network";
         }
@@ -275,17 +277,32 @@ export async function pushCostingToQueue(opts?: { docketNumbers?: string[]; test
 
       if (!fileLink) continue;
 
-      const payload = {
-        type: "COSTING_ATTACHMENT_PARSING" as const,
+      // automation-v2 payload: network files use file_type:"network" +
+      // decrypted_fileId ("costing|<rel>"); external files use file_link.
+      const payload: {
+        type: "COSTING_ATTACHMENT_PARSING";
+        referenceNo: string;
+        client_id?: string;
+        file_link?: string;
+        file_type?: "network" | "external";
+        decrypted_fileId?: string;
+        sender: "laser_cost";
+        timestamp: number;
+      } = {
+        type: "COSTING_ATTACHMENT_PARSING",
         referenceNo: tender.docketNumber || "",
-        file_link: fileLink,
-        decrypted_fileId: fileLink,
-        file_type: fileType,
-        sender: "laser_cost" as const,
+        sender: "laser_cost",
         timestamp: Date.now(),
       };
+      if (clientId) payload.client_id = clientId;
+      if (fileType === "external") {
+        payload.file_link = fileLink;
+        payload.file_type = "external";
+      } else {
+        payload.file_type = "network";
+        payload.decrypted_fileId = fileLink;
+      }
 
-      // Testing only — just log the payload; publish is commented out.
       console.log("[QueuePush]", JSON.stringify(payload));
 
       const sent = await publishTenderParsingTask(payload);
