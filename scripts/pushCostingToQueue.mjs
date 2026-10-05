@@ -170,6 +170,30 @@ async function main() {
     console.log(`Skipped (no URL) : ${skippedNoUrl}`);
     console.log(`Skipped (parsed) : ${skippedParsed}`);
 
+    // Persist the summary so costingJobReport.mjs can store it on the nightly
+    // CostingScanRun row (the step runs in a separate process).
+    try {
+      const logsDir = path.resolve(process.cwd(), "logs");
+      if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, "last-queue-push.json"),
+        JSON.stringify(
+          {
+            published,
+            failed,
+            skippedNoUrl,
+            skippedParsed,
+            total,
+            finishedAt: new Date().toISOString(),
+          },
+          null,
+          2
+        )
+      );
+    } catch (err) {
+      console.warn(`[QueuePush] Could not write last-queue-push.json: ${err.message}`);
+    }
+
     if (failed > 0) process.exitCode = 1;
   } finally {
     try {

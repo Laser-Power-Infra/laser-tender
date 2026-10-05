@@ -1177,8 +1177,19 @@ const TenderDashboardPage: React.FC = () => {
                     <span style={{ fontWeight: 700, color: r.status === "error" ? "#ff6b6b" : r.status === "running" ? "#ffd93d" : "#6bffb8" }}>
                       {r.status}
                     </span>
-                    {" · "}found {r.matched}/{r.scanned}
-                    {" · "}{r.notFound} missing{r.failed > 0 ? ` · ${r.failed} failed` : ""}
+                    {r.source === "nightly" ? (
+                      <>
+                        {" · "}Net {r.networkCount} · AppSheet {r.appsheetCount}
+                        {" · "}none {r.noAttachment} · parsed {r.parsedCount}
+                        {" · "}queued {r.queuePublished ?? 0}
+                        {(r.queueFailed ?? 0) > 0 ? ` · ${r.queueFailed} q-failed` : ""}
+                      </>
+                    ) : (
+                      <>
+                        {" · "}found {r.matched}/{r.scanned}
+                        {" · "}{r.notFound} missing{r.failed > 0 ? ` · ${r.failed} failed` : ""}
+                      </>
+                    )}
                     {typeof r.durationMs === "number" ? ` · ${(r.durationMs / 60000).toFixed(1)} min` : ""}
                   </div>
                 ))}

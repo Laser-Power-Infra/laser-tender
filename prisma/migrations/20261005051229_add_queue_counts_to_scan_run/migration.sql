@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "CostingScanRun" ADD COLUMN     "queueFailed" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "queuePublished" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "queueSkippedNoUrl" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "queueSkippedParsed" INTEGER NOT NULL DEFAULT 0;

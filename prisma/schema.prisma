@@ -65,6 +65,10 @@ model CostingScanRun {
   appsheetCount Int       @default(0)
   noAttachment  Int       @default(0)
   parsedCount   Int       @default(0)
+  queuePublished   Int    @default(0)
+  queueFailed      Int    @default(0)
+  queueSkippedNoUrl Int   @default(0)
+  queueSkippedParsed Int  @default(0)
 
   @@index([startedAt])
 }

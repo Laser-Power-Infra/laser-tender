@@ -24,7 +24,10 @@ The job runs four steps, in order:
 Every network-scan run (step 2) **and** the nightly breakdown (step 4) are recorded in
 the **`CostingScanRun`** table and shown on the dashboard (sidebar → "COSTING SCAN
 HISTORY"). Scan rows show searched/found/missing; "nightly" rows show
-`Net · Sheet · none · parsed`.
+`Net · AppSheet · none · parsed · queued` (network attachments / AppSheet-Drive URLs /
+no attachment / parsed costing / tasks published to the parsing queue).
+Step 3 (`pushCostingToQueue.mjs`) writes its summary to `logs\last-queue-push.json`,
+which step 4 reads for the `queued` count.
 
 ---
 
@@ -200,7 +203,8 @@ schtasks /Run /TN "LaserTender_CostingScan"
 
 - **Dashboard**: side panel → "COSTING SCAN HISTORY" lists the last 15 runs. Scan rows
   show status, found/matched, missing, failed, duration. "nightly" rows show
-  `Net · Sheet · none · parsed` (network / AppSheet-Drive / no-attachment / parsed).
+  `Net · AppSheet · none · parsed · queued` (network / AppSheet-Drive /
+  no-attachment / parsed / published to the parsing queue).
 - **Logs** (in `D:\laser-tenders\logs\`):
   - `costing-scan-console.log` — master timeline: STEP banners + each step's full
     output, accumulating every run.

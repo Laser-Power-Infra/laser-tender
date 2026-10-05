@@ -66,6 +66,28 @@ async function createRun(prisma) {
   }
 }
 
+/**
+ * Reads the queue-push summary written by pushCostingToQueue.mjs (step 3).
+ * Returns zeros if the file is missing (step not run).
+ */
+function readQueuePush() {
+  const file = path.resolve(process.cwd(), "logs", "last-queue-push.json");
+  try {
+    if (!fs.existsSync(file)) return { published: 0, failed: 0, skippedNoUrl: 0, skippedParsed: 0 };
+    const text = fs.readFileSync(file, "utf-8").replace(/^\uFEFF/, "");
+    const data = JSON.parse(text);
+    return {
+      published: Number(data.published || 0),
+      failed: Number(data.failed || 0),
+      skippedNoUrl: Number(data.skippedNoUrl || 0),
+      skippedParsed: Number(data.skippedParsed || 0),
+    };
+  } catch (err) {
+    console.warn(`[JobReport] Could not read last-queue-push.json: ${err.message}`);
+    return { published: 0, failed: 0, skippedNoUrl: 0, skippedParsed: 0 };
+  }
+}
+
 async function finishRun(prisma, runId, counts, durationMs, errorMsg) {
   if (!runId) return;
   try {
@@ -79,6 +101,10 @@ async function finishRun(prisma, runId, counts, durationMs, errorMsg) {
         appsheetCount: counts.appsheetCount,
         noAttachment: counts.noAttachment,
         parsedCount: counts.parsedCount,
+        queuePublished: counts.queuePublished,
+        queueFailed: counts.queueFailed,
+        queueSkippedNoUrl: counts.queueSkippedNoUrl,
+        queueSkippedParsed: counts.queueSkippedParsed,
         status: errorMsg ? "error" : "success",
         error: errorMsg ? String(errorMsg).slice(0, 2000) : null,
       },
@@ -100,6 +126,10 @@ async function main() {
     appsheetCount: 0,
     noAttachment: 0,
     parsedCount: 0,
+    queuePublished: 0,
+    queueFailed: 0,
+    queueSkippedNoUrl: 0,
+    queueSkippedParsed: 0,
   };
 
   try {
@@ -122,6 +152,12 @@ async function main() {
     counts.noAttachment = Number(row.no_attachment || 0);
     counts.parsedCount = Number(row.parsed_count || 0);
 
+    const queue = readQueuePush();
+    counts.queuePublished = queue.published;
+    counts.queueFailed = queue.failed;
+    counts.queueSkippedNoUrl = queue.skippedNoUrl;
+    counts.queueSkippedParsed = queue.skippedParsed;
+
     runId = await createRun(prisma);
 
     console.log("[JobReport] ── NIGHTLY COSTING BREAKDOWN ──");
@@ -130,6 +166,7 @@ async function main() {
     console.log(`AppSheet/Drive URLs  : ${counts.appsheetCount}`);
     console.log(`No attachment        : ${counts.noAttachment}`);
     console.log(`Parsed costing       : ${counts.parsedCount}`);
+    console.log(`Queue published      : ${counts.queuePublished}${counts.queueFailed ? ` (failed ${counts.queueFailed})` : ""}`);
   } catch (err) {
     runError = err.message || String(err);
     console.error("[JobReport] Error:", runError);
