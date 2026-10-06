@@ -6,6 +6,7 @@ import { decryptStoredPath, isPlainUrl } from "@/services/costingFileFinder.mjs"
 import { publishTenderParsingTask } from "@/lib/tenderQueue";
 import { syncSmartsheetToDb } from "@/lib/smartsheet-sync";
 import { prisma } from "@/lib/prisma";
+import { applyTenderAllocationPlan, createTenderAllocationPlan } from "@/lib/tenderAllocation";
 
 export interface TenderActionResponse<T = unknown> {
   success: boolean;
@@ -14,6 +15,7 @@ export interface TenderActionResponse<T = unknown> {
   summary?: { matched: number; total: number };
   updatedCount?: number;
   updatedDocketNumbers?: string[];
+  allocationSummary?: Record<string, { total: number; PRITIKANA: number; RITWICK: number; skipped: number }>;
   scanSummary?: { scanned: number; matched: number; notFound: number; total: number; remaining: number };
   queueSummary?: { total: number; published: number; failed: number; skippedNoUrl: number; skippedParsed: number };
 }
@@ -28,6 +30,25 @@ export async function getSmartsheetTenders(): Promise<TenderActionResponse> {
       success: false,
       data: [],
       error: err instanceof Error ? err.message : "An unexpected server error occurred.",
+    };
+  }
+}
+
+export async function allocateTenders(): Promise<TenderActionResponse> {
+  try {
+    const plan = await createTenderAllocationPlan();
+    const result = await applyTenderAllocationPlan(plan);
+    return {
+      success: true,
+      data: result.rows,
+      updatedCount: result.totalUpdated,
+      allocationSummary: result.byCategory,
+    };
+  } catch (err) {
+    console.error("[TenderAllocation] Error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to allocate tenders.",
     };
   }
 }

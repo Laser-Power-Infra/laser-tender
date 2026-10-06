@@ -19,6 +19,7 @@ import {
   updateTenderEmailSubjectLine,
   updateTenderLostStillScope,
   getCostingScanRuns,
+  allocateTenders,
 } from "@/actions/tenders";
 
 type SortField = keyof SmartsheetTender;
@@ -169,6 +170,7 @@ const TenderDashboardPage: React.FC = () => {
   const [scanSummary, setScanSummary] = useState<{ scanned: number; matched: number; notFound: number; total: number; remaining: number } | null>(null);
   const [scanHistory, setScanHistory] = useState<any[]>([]);
   const [pushingQueue, setPushingQueue] = useState(false);
+  const [allocatingTenders, setAllocatingTenders] = useState(false);
   const [queueSummary, setQueueSummary] = useState<{ total: number; published: number; failed: number; skippedNoUrl: number; skippedParsed: number } | null>(null);
   const [queueTestMode, setQueueTestMode] = useState(true);
   const [queueTestDockets, setQueueTestDockets] = useState("");
@@ -452,6 +454,39 @@ const TenderDashboardPage: React.FC = () => {
       console.error("Sync failed:", err);
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleAllocateTenders = async () => {
+    if (allocatingTenders) return;
+    setAllocatingTenders(true);
+    try {
+      const result = await allocateTenders();
+      if (!result.success) {
+        window.alert(result.error || "Failed to allocate tenders.");
+        return;
+      }
+      const assignments = (result.data || []) as {
+        docketNumber: string | null;
+        after: { allocatedTo: string | null };
+      }[];
+      setAllocatedToOverrides((previous) => {
+        const next = { ...previous };
+        for (const assignment of assignments) {
+          if (assignment.docketNumber && assignment.after.allocatedTo) {
+            next[assignment.docketNumber] = assignment.after.allocatedTo;
+          }
+        }
+        return next;
+      });
+      const summary = Object.entries(result.allocationSummary || {})
+        .map(([category, counts]) => `${category}: ${counts.PRITIKANA}/${counts.RITWICK}${counts.skipped ? ` (${counts.skipped} skipped)` : ""}`)
+        .join("\n");
+      window.alert(`Allocated ${result.updatedCount ?? 0} tenders.\n${summary}`);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to allocate tenders.");
+    } finally {
+      setAllocatingTenders(false);
     }
   };
 
@@ -1060,6 +1095,14 @@ const TenderDashboardPage: React.FC = () => {
 
           {/* Assigned Tenders By Person */}
           <div className="assigned-tenders-section">
+            <button
+              className="tender-refresh-sidebar-btn"
+              onClick={handleAllocateTenders}
+              disabled={loading || allocatingTenders}
+              style={{ marginBottom: 10 }}
+            >
+              {allocatingTenders ? "Allocating..." : "Allocate tender"}
+            </button>
             <div className="assigned-tenders-title">ASSIGNED TENDERS BY PERSON</div>
             {allocatedToCounts.length === 0 ? (
               <div style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.45)", fontStyle: "italic", padding: "4px 0" }}>

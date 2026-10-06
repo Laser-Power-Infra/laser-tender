@@ -12,7 +12,9 @@
     "sync:costing": "node scripts/syncExternalCosting.mjs",
     "scan:costing-files": "node scripts/scanCostingFiles.mjs",
     "backfill:contracts": "node scripts/backfillContractFromXls.mjs",
-    "backfill:contracts:dry": "node scripts/backfillContractFromXls.mjs --dry-run"
+    "backfill:contracts:dry": "node scripts/backfillContractFromXls.mjs --dry-run",
+    "allocate:tenders": "node scripts/allocateTenders.mjs",
+    "allocate:tenders:dry": "node scripts/allocateTenders.mjs --dry-run"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
