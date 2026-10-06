@@ -358,6 +358,22 @@
     box-shadow: 0 1px 3px rgba(26, 115, 232, 0.15);
   }
 
+  .allocated-to-select {
+    @apply w-full rounded-[3px] border border-[#d2d8df] bg-white px-1 py-0.5 font-sans text-xs text-[#202124] outline-none;
+    min-height: 24px;
+  }
+
+  .allocated-to-select:focus {
+    @apply border-[#1a73e8];
+    box-shadow: 0 1px 3px rgba(26, 115, 232, 0.15);
+  }
+
+  .allocated-to-select:disabled {
+    @apply cursor-not-allowed border-transparent bg-transparent font-semibold opacity-100;
+    appearance: none;
+    padding-left: 2px;
+  }
+
   .enquiry-date-badge {
     @apply inline-block rounded-[10px] border border-[#d2e3fc] bg-[#e8f0fe] px-2 py-0.5 text-[11px] font-semibold text-[#1a73e8];
     font-variant-numeric: tabular-nums;

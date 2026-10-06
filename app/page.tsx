@@ -175,9 +175,6 @@ const TenderDashboardPage: React.FC = () => {
   const [page, setPage]           = useState(1);
   const [pageSize, setPageSize]   = useState(50);
 
-  // Inline editing state for Allocated To
-  const [editingAllocatedTo, setEditingAllocatedTo] = useState<string | null>(null);
-  const [editAllocatedValue, setEditAllocatedValue] = useState("");
   const [savingAllocated, setSavingAllocated] = useState<Record<string, boolean>>({});
   const [allocatedToOverrides, setAllocatedToOverrides] = useState<Record<string, string | null>>({});
 
@@ -318,37 +315,30 @@ const TenderDashboardPage: React.FC = () => {
     document.addEventListener("mouseup", handleMouseUp);
   };
 
-  const handleSaveAllocatedTo = async (docketNumber: string) => {
-    if (savingAllocated[docketNumber]) return;
-    const newValue = editAllocatedValue;
+  const handleAssignAllocatedTo = async (docketNumber: string, newValue: string) => {
+    if (!newValue.trim() || savingAllocated[docketNumber]) return;
     setSavingAllocated(prev => ({ ...prev, [docketNumber]: true }));
     try {
-      const json = await updateTenderAllocatedTo(docketNumber, newValue || null);
+      const json = await updateTenderAllocatedTo(docketNumber, newValue);
       if (json.success) {
         setAllocatedToOverrides(prev => ({ ...prev, [docketNumber]: newValue }));
-
-        const currentRow = data.find(r => r.docketNumber === docketNumber);
-        const partyName = currentRow?.partyName;
-        if (partyName) {
-          const samePartyRows = data.filter(
-            r => r.partyName === partyName && r.docketNumber !== docketNumber
-          );
-          if (samePartyRows.length > 0) {
-            const batchDocketNumbers = samePartyRows.map(r => r.docketNumber!);
-            setAllocatedToOverrides(prev => {
-              const next = { ...prev };
-              batchDocketNumbers.forEach(dn => { next[dn] = newValue; });
-              return next;
-            });
-            batchUpdateAllocatedTo(batchDocketNumbers, newValue || null).catch(err => console.error("Batch auto-fill failed:", err));
-          }
+        const batchResult = await batchUpdateAllocatedTo(docketNumber, newValue);
+        if (batchResult.success && batchResult.updatedDocketNumbers?.length) {
+          setAllocatedToOverrides(prev => {
+            const next = { ...prev };
+            batchResult.updatedDocketNumbers!.forEach(dn => { next[dn] = newValue; });
+            return next;
+          });
+        } else if (!batchResult.success) {
+          console.error("Same-party auto-fill failed:", batchResult.error);
         }
+      } else {
+        console.error("Failed to assign tender:", json.error);
       }
     } catch (err) {
-      console.error("Failed to update Allocated To:", err);
+      console.error("Failed to assign Allocated To:", err);
     } finally {
       setSavingAllocated(prev => ({ ...prev, [docketNumber]: false }));
-      setEditingAllocatedTo(null);
     }
   };
 
@@ -1582,50 +1572,30 @@ const TenderDashboardPage: React.FC = () => {
                             </td>
                             {/* Allocated To */}
                             <td>
-                              {editingAllocatedTo === row.docketNumber ? (
-                                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                  <input
-                                    type="text"
-                                    className="allocated-edit-input"
-                                    value={editAllocatedValue}
-                                    autoFocus
-                                    onChange={e => setEditAllocatedValue(e.target.value)}
-                                    onBlur={() => row.docketNumber && handleSaveAllocatedTo(row.docketNumber)}
-                                    onKeyDown={e => {
-                                      if (e.key === "Enter") {
-                                        e.preventDefault();
-                                        (e.target as HTMLInputElement).blur();
-                                      } else if (e.key === "Escape") {
-                                        setEditingAllocatedTo(null);
-                                      }
-                                    }}
-                                  />
-                                  {savingAllocated[row.docketNumber!] && (
-                                    <span style={{ fontSize: 10, color: "#999" }}>...</span>
-                                  )}
-                                </div>
-                              ) : (
-                                <div
-                                  className="allocated-to-display"
-                                  onClick={() => {
-                                    if (!row.docketNumber || savingAllocated[row.docketNumber]) return;
-                                    setEditingAllocatedTo(row.docketNumber);
-                                    setEditAllocatedValue(
-                                      row.docketNumber && allocatedToOverrides.hasOwnProperty(row.docketNumber)
-                                        ? allocatedToOverrides[row.docketNumber] ?? ""
-                                        : row.allocatedTo ?? ""
-                                    );
-                                  }}
-                                  title="Click to edit"
-                                >
-                                  {row.docketNumber && allocatedToOverrides.hasOwnProperty(row.docketNumber)
-                                    ? allocatedToOverrides[row.docketNumber] ?? <span className="smartsheet-null-cell">—</span>
-                                    : row.allocatedTo ?? <span className="smartsheet-null-cell">—</span>}
-                                  {!savingAllocated[row.docketNumber!] && (
-                                    <span className="allocated-edit-icon">✎</span>
-                                  )}
-                                </div>
-                              )}
+                              {(() => {
+                                const assignedTo = row.docketNumber && allocatedToOverrides.hasOwnProperty(row.docketNumber)
+                                  ? allocatedToOverrides[row.docketNumber]
+                                  : row.allocatedTo;
+                                const isAssigned = !!assignedTo?.trim();
+                                return (
+                                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                    <select
+                                      className="allocated-to-select"
+                                      value={assignedTo ?? ""}
+                                      disabled={isAssigned || !row.docketNumber || !!savingAllocated[row.docketNumber]}
+                                      onChange={e => row.docketNumber && handleAssignAllocatedTo(row.docketNumber, e.target.value)}
+                                      aria-label={`Allocate ${row.docketNumber || "tender"}`}
+                                      title={isAssigned ? "Assignment is permanent" : "Select an assignee"}
+                                    >
+                                      <option value="">Select assignee</option>
+                                      {allocatedToCounts.map(({ name }) => <option key={name} value={name}>{name}</option>)}
+                                    </select>
+                                    {savingAllocated[row.docketNumber || ""] && (
+                                      <span style={{ fontSize: 10, color: "#999" }}>...</span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </td>
                             {/* Status */}
                             <td
@@ -2080,33 +2050,9 @@ const TenderDashboardPage: React.FC = () => {
             savingEmailSubject={selectedTender.docketNumber ? !!savingEmailSubject[selectedTender.docketNumber] : false}
             savingReverseAuction={selectedTender.docketNumber ? !!savingReverseAuction[selectedTender.docketNumber] : false}
             savingLostStillScope={selectedTender.docketNumber ? !!savingLostStillScope[selectedTender.docketNumber] : false}
-            onSaveAllocatedTo={async val => {
-              if (!selectedTender.docketNumber) return;
-              const dn = selectedTender.docketNumber;
-              if (savingAllocated[dn]) return;
-              setSavingAllocated(prev => ({ ...prev, [dn]: true }));
-              try {
-                const json = await updateTenderAllocatedTo(dn, val || null);
-                if (json.success) {
-                  setAllocatedToOverrides(prev => ({ ...prev, [dn]: val }));
-                  const currentRow = data.find(r => r.docketNumber === dn);
-                  const partyName = currentRow?.partyName;
-                  if (partyName) {
-                    const samePartyRows = data.filter(r => r.partyName === partyName && r.docketNumber !== dn);
-                    if (samePartyRows.length > 0) {
-                      const batchDocketNumbers = samePartyRows.map(r => r.docketNumber!);
-                      setAllocatedToOverrides(prev => {
-                        const next = { ...prev };
-                        batchDocketNumbers.forEach(d => { next[d] = val; });
-                        return next;
-                      });
-                      batchUpdateAllocatedTo(batchDocketNumbers, val || null).catch(err => console.error("Batch auto-fill failed:", err));
-                    }
-                  }
-                }
-              } finally {
-                setSavingAllocated(prev => ({ ...prev, [dn]: false }));
-              }
+            allocatedToOptions={allocatedToCounts.map(({ name }) => name)}
+            onSaveAllocatedTo={val => {
+              if (selectedTender.docketNumber) handleAssignAllocatedTo(selectedTender.docketNumber, val);
             }}
             onSaveStatus={async val => {
               if (!selectedTender.docketNumber) return;

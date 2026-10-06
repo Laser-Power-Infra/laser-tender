@@ -21,6 +21,7 @@ interface Props {
   effectiveEmailSubjectLine: string | null;
   effectiveReverseAuction: string | null;
   effectiveLostStillScope: string;
+  allocatedToOptions: string[];
   // draft handlers
   savingAllocated: boolean;
   savingStatus: boolean;
@@ -49,6 +50,7 @@ export default function TenderDetailSheet({
   effectiveEmailSubjectLine,
   effectiveReverseAuction,
   effectiveLostStillScope,
+  allocatedToOptions,
   savingAllocated,
   savingStatus,
   savingContact,
@@ -64,7 +66,6 @@ export default function TenderDetailSheet({
   onSaveReverseAuction,
   onSaveLostStillScope,
 }: Props) {
-  const [draftAllocated, setDraftAllocated] = useState("");
   const [draftStatus, setDraftStatus] = useState("");
   const [draftContact, setDraftContact] = useState("");
   const [draftEmailId, setDraftEmailId] = useState("");
@@ -72,13 +73,12 @@ export default function TenderDetailSheet({
 
   useEffect(() => {
     if (tender) {
-      setDraftAllocated(effectiveAllocatedTo ?? "");
       setDraftStatus(effectiveStatus ?? "");
       setDraftContact(effectiveContactNo ?? "");
       setDraftEmailId(effectiveEmailId ?? "");
       setDraftEmailSubject(effectiveEmailSubjectLine ?? "");
     }
-  }, [tender, effectiveAllocatedTo, effectiveStatus, effectiveContactNo, effectiveEmailId, effectiveEmailSubjectLine]);
+  }, [tender, effectiveStatus, effectiveContactNo, effectiveEmailId, effectiveEmailSubjectLine]);
 
   useEffect(() => {
     if (!open) return;
@@ -146,17 +146,17 @@ export default function TenderDetailSheet({
 
             <label className="tender-detail-field">
               <span className="tender-detail-label">Allocated To {savingAllocated && <span style={{ fontWeight: 400, fontSize: 11, color: "#999" }}>Saving...</span>}</span>
-              <input
+              <select
                 className="tender-detail-input"
-                value={draftAllocated}
-                onChange={e => setDraftAllocated(e.target.value)}
-                onBlur={() => onSaveAllocatedTo(draftAllocated)}
-                onKeyDown={e => {
-                  if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
-                  if (e.key === "Escape") { setDraftAllocated(effectiveAllocatedTo ?? ""); (e.target as HTMLInputElement).blur(); }
-                }}
-                placeholder="—"
-              />
+                value={effectiveAllocatedTo ?? ""}
+                disabled={!!effectiveAllocatedTo || savingAllocated}
+                onChange={e => onSaveAllocatedTo(e.target.value)}
+                aria-label={`Allocate ${tender.docketNumber || "tender"}`}
+                title={effectiveAllocatedTo ? "Assignment is permanent" : "Select an assignee"}
+              >
+                <option value="">Select assignee</option>
+                {allocatedToOptions.map(name => <option key={name} value={name}>{name}</option>)}
+              </select>
             </label>
 
             <label className="tender-detail-field">

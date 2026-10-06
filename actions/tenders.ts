@@ -13,6 +13,7 @@ export interface TenderActionResponse<T = unknown> {
   error?: string;
   summary?: { matched: number; total: number };
   updatedCount?: number;
+  updatedDocketNumbers?: string[];
   scanSummary?: { scanned: number; matched: number; notFound: number; total: number; remaining: number };
   queueSummary?: { total: number; published: number; failed: number; skippedNoUrl: number; skippedParsed: number };
 }
@@ -152,19 +153,23 @@ export async function updateTenderReverseAuction(docketNumber: string, value: st
 }
 
 export async function batchUpdateAllocatedTo(
-  docketNumbers: string[],
-  allocatedTo: string | null
+  sourceDocketNumber: string,
+  allocatedTo: string
 ): Promise<TenderActionResponse> {
   try {
-    if (!Array.isArray(docketNumbers) || docketNumbers.length === 0) {
-      return { success: false, error: "docketNumbers must be a non-empty array" };
+    if (!sourceDocketNumber || !allocatedTo.trim()) {
+      return { success: false, error: "A source docket and assignee are required" };
     }
     const result = await DatabaseSmartsheetService.batchUpdateSmartsheetTenderAllocatedTo(
-      docketNumbers,
-      allocatedTo ?? null
+      sourceDocketNumber,
+      allocatedTo
     );
     if (!result.success) return { success: false, error: result.error || "Update failed" };
-    return { success: true, updatedCount: result.updatedCount };
+    return {
+      success: true,
+      updatedCount: result.updatedCount,
+      updatedDocketNumbers: result.updatedDocketNumbers,
+    };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : "Unexpected error" };
   }
