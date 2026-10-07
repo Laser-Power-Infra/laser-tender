@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useSmartsheetTenders } from "@/hooks/useSmartsheetTenders";
 import { SmartsheetTender } from "@/types/smartsheetTender";
 import TenderDetailSheet from "@/components/TenderDetailSheet";
@@ -237,7 +237,6 @@ const TenderDashboardPage: React.FC = () => {
   // Open dropdown per column + inner panel search per column
   const [openColDropdown, setOpenColDropdown] = useState<string | null>(null);
   const [colPanelSearch, setColPanelSearch] = useState<Record<string, string>>({});
-  const colDropdownRef = useRef<HTMLDivElement | null>(null);
 
   // Specialized filters states
   const [enquiryStartDate, setEnquiryStartDate] = useState("");
@@ -255,14 +254,10 @@ const TenderDashboardPage: React.FC = () => {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        colDropdownRef.current &&
-        openColDropdown &&
-        !colDropdownRef.current.contains(event.target as Node) &&
-        !(event.target as Element)?.closest(".multiselect-dropdown-panel")
-      ) {
-        setOpenColDropdown(null);
-      }
+      if (!openColDropdown) return;
+      const target = event.target as Element | null;
+      if (target?.closest(".custom-multiselect-container")) return;
+      setOpenColDropdown(null);
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
