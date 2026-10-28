@@ -356,7 +356,7 @@ const TenderDashboardPage: React.FC = () => {
     }
   };
 
-  const handleSaveReverseAuction = async (docketNumber: string, value: string) => {
+  const handleSaveReverseAuction = async (docketNumber: string, value: string | null) => {
     if (savingReverseAuction[docketNumber]) return;
     setSavingReverseAuction(prev => ({ ...prev, [docketNumber]: true }));
     try {
@@ -1588,12 +1588,12 @@ const TenderDashboardPage: React.FC = () => {
                                     <button
                                       className={`ra-toggle-btn ${effective === "Lost" ? "ra-no" : "ra-inactive"}`}
                                       disabled={!!savingLostStillScope[row.docketNumber!]}
-                                      onClick={() => row.docketNumber && handleSaveLostStillScope(row.docketNumber, "Lost")}
+                                      onClick={() => row.docketNumber && handleSaveLostStillScope(row.docketNumber, effective === "Lost" ? null : "Lost")}
                                     >Lost</button>
                                     <button
                                       className={`ra-toggle-btn ${effective === "Still Scope" ? "ra-yes" : "ra-inactive"}`}
                                       disabled={!!savingLostStillScope[row.docketNumber!]}
-                                      onClick={() => row.docketNumber && handleSaveLostStillScope(row.docketNumber, "Still Scope")}
+                                      onClick={() => row.docketNumber && handleSaveLostStillScope(row.docketNumber, effective === "Still Scope" ? null : "Still Scope")}
                                     >Still Scope</button>
                                     {!!savingLostStillScope[row.docketNumber!] && <span style={{ fontSize: 10, color: "#999" }}>...</span>}
                                   </div>
@@ -1868,14 +1868,14 @@ const TenderDashboardPage: React.FC = () => {
                                     <button
                                       className={`ra-toggle-btn ${effectiveVal === "yes" ? "ra-yes" : "ra-inactive"}`}
                                       disabled={savingReverseAuction[row.docketNumber!]}
-                                      onClick={() => row.docketNumber && handleSaveReverseAuction(row.docketNumber, "yes")}
+                                      onClick={() => row.docketNumber && handleSaveReverseAuction(row.docketNumber, effectiveVal === "yes" ? null : "yes")}
                                     >
                                       Yes
                                     </button>
                                     <button
                                       className={`ra-toggle-btn ${effectiveVal === "no" ? "ra-no" : "ra-inactive"}`}
                                       disabled={savingReverseAuction[row.docketNumber!]}
-                                      onClick={() => row.docketNumber && handleSaveReverseAuction(row.docketNumber, "no")}
+                                      onClick={() => row.docketNumber && handleSaveReverseAuction(row.docketNumber, effectiveVal === "no" ? null : "no")}
                                     >
                                       No
                                     </button>
@@ -2140,7 +2140,7 @@ const TenderDashboardPage: React.FC = () => {
                 setSavingEmailSubject(prev => ({ ...prev, [dn]: false }));
               }
             }}
-            onSaveReverseAuction={(val: string) => {
+            onSaveReverseAuction={(val: string | null) => {
               if (!selectedTender.docketNumber) return;
               handleSaveReverseAuction(selectedTender.docketNumber!, val);
             }}

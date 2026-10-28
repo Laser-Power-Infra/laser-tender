@@ -163,9 +163,9 @@ export async function updateTenderStatus(docketNumber: string, status: string | 
   }
 }
 
-export async function updateTenderReverseAuction(docketNumber: string, value: string): Promise<TenderActionResponse> {
+export async function updateTenderReverseAuction(docketNumber: string, value: string | null): Promise<TenderActionResponse> {
   try {
-    const result = await DatabaseSmartsheetService.updateSmartsheetTenderReverseAuction(docketNumber, value);
+    const result = await DatabaseSmartsheetService.updateSmartsheetTenderReverseAuction(docketNumber, value ?? null);
     if (!result.success) return { success: false, error: result.error || "Record not found" };
     return { success: true };
   } catch (err) {

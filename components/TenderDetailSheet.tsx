@@ -35,7 +35,7 @@ interface Props {
   onSaveContactNo: (val: string) => void;
   onSaveEmailId: (val: string) => void;
   onSaveEmailSubjectLine: (val: string) => void;
-  onSaveReverseAuction: (val: string) => void;
+  onSaveReverseAuction: (val: string | null) => void;
   onSaveLostStillScope: (val: string | null) => void;
 }
 
@@ -225,12 +225,12 @@ export default function TenderDetailSheet({
                 <button
                   className={`ra-toggle-btn ${effectiveReverseAuction === "yes" ? "ra-yes" : "ra-inactive"}`}
                   disabled={savingReverseAuction}
-                  onClick={() => onSaveReverseAuction("yes")}
+                  onClick={() => onSaveReverseAuction(effectiveReverseAuction === "yes" ? null : "yes")}
                 >Yes</button>
                 <button
                   className={`ra-toggle-btn ${effectiveReverseAuction === "no" ? "ra-no" : "ra-inactive"}`}
                   disabled={savingReverseAuction}
-                  onClick={() => onSaveReverseAuction("no")}
+                  onClick={() => onSaveReverseAuction(effectiveReverseAuction === "no" ? null : "no")}
                 >No</button>
               </div>
             </div>
@@ -247,12 +247,12 @@ export default function TenderDetailSheet({
                   <button
                     className={`ra-toggle-btn ${effectiveLostStillScope === "Lost" ? "ra-no" : "ra-inactive"}`}
                     disabled={savingLostStillScope}
-                    onClick={() => onSaveLostStillScope("Lost")}
+                    onClick={() => onSaveLostStillScope(effectiveLostStillScope === "Lost" ? null : "Lost")}
                   >Lost</button>
                   <button
                     className={`ra-toggle-btn ${effectiveLostStillScope === "Still Scope" ? "ra-yes" : "ra-inactive"}`}
                     disabled={savingLostStillScope}
-                    onClick={() => onSaveLostStillScope("Still Scope")}
+                    onClick={() => onSaveLostStillScope(effectiveLostStillScope === "Still Scope" ? null : "Still Scope")}
                   >Still Scope</button>
                 </div>
               )}
