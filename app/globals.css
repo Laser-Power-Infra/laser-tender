@@ -658,8 +658,32 @@
     text-overflow: clip;
   }
 
+  /* Uniform row height: multi-line cells scroll inside a fixed box instead of stretching the row */
+  .smartsheet-data-table td {
+    height: 56px;
+  }
+
+  .smartsheet-data-table td:not(.col-status) > .allocated-to-display {
+    max-height: 36px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    white-space: normal;
+    word-break: break-word;
+    scrollbar-width: thin;
+  }
+
+  .tender-item-stack,
+  .tender-qty-stack,
+  .raw-materials-grid {
+    max-height: 36px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+
   .status-scroll-wrap {
-    max-height: 66px;
+    max-height: 36px;
     overflow-y: auto;
     overflow-x: hidden;
     white-space: normal;
@@ -757,11 +781,13 @@
   }
 
   .ra-yes {
-    @apply border-[#4caf50] bg-[#e8f5e9] text-[#2e7d32];
+    @apply border-[#2e7d32] bg-[#2e7d32] font-bold text-white;
+    box-shadow: 0 0 0 2px rgba(46, 125, 50, 0.25);
   }
 
   .ra-no {
-    @apply border-[#ef5350] bg-[#fbe9e7] text-[#c62828];
+    @apply border-[#c62828] bg-[#c62828] font-bold text-white;
+    box-shadow: 0 0 0 2px rgba(198, 40, 40, 0.25);
   }
 
   .ra-inactive {

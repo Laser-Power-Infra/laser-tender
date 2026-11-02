@@ -74,7 +74,8 @@ function cmp(a: string | null, b: string | null, dir: SortDir): number {
 /** Format raw date string "YYYY-MM-DD" → "DD-MMM-YY" for display */
 function formatDate(raw: string | null): string | null {
   if (!raw) return null;
-  const d = new Date(raw);
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw.trim());
+  const d = iso ? new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])) : new Date(raw);
   if (isNaN(d.getTime())) return raw;
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
 }
@@ -1031,7 +1032,14 @@ const TenderDashboardPage: React.FC = () => {
   const totalRecords   = data.length;
   const tenderCount    = data.filter(r => r.tenderPurchase?.toLowerCase().includes("tender")).length;
   const purchaseCount  = data.filter(r => r.tenderPurchase?.toLowerCase().includes("purchase")).length;
+  const unclassifiedCount = totalRecords - tenderCount - purchaseCount;
   const withQuotation  = data.filter(r => r.quotationNumber).length;
+  const unallocatedCount = data.filter(r => {
+    const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
+      ? allocatedToOverrides[r.docketNumber]
+      : r.allocatedTo;
+    return !val?.trim();
+  }).length;
 
   return (
     <div className="tender-layout-container">
@@ -1049,10 +1057,16 @@ const TenderDashboardPage: React.FC = () => {
           <div className="tender-stat-card">
             <div className="tender-stat-label">Tenders</div>
             <div className="tender-stat-value" style={{ color: "#ff6b6b" }}>{tenderCount.toLocaleString()}</div>
+            <div className="tender-stat-sub">incl. Laser Tender</div>
           </div>
           <div className="tender-stat-card">
             <div className="tender-stat-label">Purchases</div>
             <div className="tender-stat-value" style={{ color: "#38ef7d" }}>{purchaseCount.toLocaleString()}</div>
+          </div>
+          <div className="tender-stat-card">
+            <div className="tender-stat-label">Unclassified</div>
+            <div className="tender-stat-value" style={{ color: "#ffc857" }}>{unclassifiedCount.toLocaleString()}</div>
+            <div className="tender-stat-sub">Budgetary or blank type</div>
           </div>
           <div className="tender-stat-card">
             <div className="tender-stat-label">With Quotation</div>
@@ -1099,6 +1113,10 @@ const TenderDashboardPage: React.FC = () => {
               {allocatingTenders ? "Allocating..." : "Allocate tender"}
             </button>
             <div className="assigned-tenders-title">ASSIGNED TENDERS BY PERSON</div>
+            <div className="assigned-tender-card" style={{ cursor: "default" }} title="Records with no allocatedTo value">
+              <span className="assigned-tender-name">Unallocated</span>
+              <span className="assigned-tender-count">{unallocatedCount}</span>
+            </div>
             {allocatedToCounts.length === 0 ? (
               <div style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.45)", fontStyle: "italic", padding: "4px 0" }}>
                 {loading ? "Loading assigned persons..." : "No assigned persons found"}
@@ -1567,7 +1585,7 @@ const TenderDashboardPage: React.FC = () => {
                             <td style={{ fontFamily: "monospace", fontWeight: 600, color: "#0a2540" }} title={row.contractNo ?? undefined}>
                               {row.contractNo ? (
                                 row.contractNo.includes(",") ? (
-                                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                  <div className="tender-item-stack" style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                                     {row.contractNo.split(",").map((c) => c.trim()).filter(Boolean).map((c, i) => (
                                       <span key={i} style={{ display: "inline-block", background: "#e8f0fe", padding: "1px 5px", borderRadius: "3px", border: "1px solid #d2e3fc", fontSize: "11px", width: "fit-content" }}>{c}</span>
                                     ))}
@@ -1587,14 +1605,16 @@ const TenderDashboardPage: React.FC = () => {
                                   <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
                                     <button
                                       className={`ra-toggle-btn ${effective === "Lost" ? "ra-no" : "ra-inactive"}`}
+                                      aria-pressed={effective === "Lost"}
                                       disabled={!!savingLostStillScope[row.docketNumber!]}
                                       onClick={() => row.docketNumber && handleSaveLostStillScope(row.docketNumber, effective === "Lost" ? null : "Lost")}
-                                    >Lost</button>
+                                    >{effective === "Lost" ? "✓ Lost" : "Lost"}</button>
                                     <button
                                       className={`ra-toggle-btn ${effective === "Still Scope" ? "ra-yes" : "ra-inactive"}`}
+                                      aria-pressed={effective === "Still Scope"}
                                       disabled={!!savingLostStillScope[row.docketNumber!]}
                                       onClick={() => row.docketNumber && handleSaveLostStillScope(row.docketNumber, effective === "Still Scope" ? null : "Still Scope")}
-                                    >Still Scope</button>
+                                    >{effective === "Still Scope" ? "✓ Still Scope" : "Still Scope"}</button>
                                     {!!savingLostStillScope[row.docketNumber!] && <span style={{ fontSize: 10, color: "#999" }}>...</span>}
                                   </div>
                                 );
@@ -1602,7 +1622,9 @@ const TenderDashboardPage: React.FC = () => {
                             </td>
                             {/* Quotation Date */}
                             <td>
-                              {row.quotationDate ?? <span className="smartsheet-null-cell">—</span>}
+                              {row.quotationDate
+                                ? <span className="enquiry-date-badge">{formatDate(row.quotationDate)}</span>
+                                : <span className="smartsheet-null-cell">—</span>}
                             </td>
                             {/* Account Holder */}
                             <td>
