@@ -813,9 +813,12 @@ const TenderDashboardPage: React.FC = () => {
   ]);
 
   // Allocated To counts for assigned persons sidebar cards (cascading calculation)
-  const allocatedToCounts = useMemo(() => {
+  // unallocatedCount uses the same cascaded rows as the person counts, so the
+  // Unallocated card's number follows the other filters like they do.
+  const { allocatedToCounts, unallocatedCount } = useMemo(() => {
     const rows = applyFilters(data, ["allocatedTo"]);
     const counts: Record<string, number> = {};
+    let unallocated = 0;
     rows.forEach(r => {
       const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
         ? allocatedToOverrides[r.docketNumber]
@@ -823,6 +826,8 @@ const TenderDashboardPage: React.FC = () => {
       const person = val?.trim();
       if (person) {
         counts[person] = (counts[person] || 0) + 1;
+      } else {
+        unallocated += 1;
       }
     });
 
@@ -836,12 +841,16 @@ const TenderDashboardPage: React.FC = () => {
       }
     });
 
-    return Array.from(allPersonsSet)
-      .map(name => ({ name, count: counts[name] || 0 }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    return {
+      allocatedToCounts: Array.from(allPersonsSet)
+        .map(name => ({ name, count: counts[name] || 0 }))
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+      unallocatedCount: unallocated,
+    };
   }, [
     data,
     allocatedToOverrides,
+    lostStillScopeOverrides,
     search,
     colSearches,
     colFilterSelected,
@@ -886,6 +895,12 @@ const TenderDashboardPage: React.FC = () => {
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const pageStart  = (page - 1) * pageSize;
   const paginated  = sorted.slice(pageStart, pageStart + pageSize);
+
+  // If the list shrinks while on a later page (e.g. rows leave the Unallocated
+  // view after "Allocate tender"), step back to the last page that still has rows.
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const handleSort = (field: SortField) => {
     if (field === sortField) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -1034,12 +1049,7 @@ const TenderDashboardPage: React.FC = () => {
   const purchaseCount  = data.filter(r => r.tenderPurchase?.toLowerCase().includes("purchase")).length;
   const unclassifiedCount = totalRecords - tenderCount - purchaseCount;
   const withQuotation  = data.filter(r => r.quotationNumber).length;
-  const unallocatedCount = data.filter(r => {
-    const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
-      ? allocatedToOverrides[r.docketNumber]
-      : r.allocatedTo;
-    return !val?.trim();
-  }).length;
+  const unallocatedActive = (colFilterSelected["allocatedTo"] || []).includes(BLANK);
 
   return (
     <div className="tender-layout-container">
@@ -1113,7 +1123,11 @@ const TenderDashboardPage: React.FC = () => {
               {allocatingTenders ? "Allocating..." : "Allocate tender"}
             </button>
             <div className="assigned-tenders-title">ASSIGNED TENDERS BY PERSON</div>
-            <div className="assigned-tender-card" style={{ cursor: "default" }} title="Records with no allocatedTo value">
+            <div
+              className={`assigned-tender-card${unallocatedActive ? " active" : ""}`}
+              onClick={(e) => handleAllocatedCardClick(BLANK, e)}
+              title="Click to filter unallocated"
+            >
               <span className="assigned-tender-name">Unallocated</span>
               <span className="assigned-tender-count">{unallocatedCount}</span>
             </div>
