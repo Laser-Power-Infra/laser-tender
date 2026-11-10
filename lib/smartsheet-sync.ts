@@ -87,15 +87,20 @@ async function fetchSmartsheetData(): Promise<{
   return { records, totalRows: rows.length };
 }
 
-let syncPromise: Promise<unknown> | null = null;
+// Kept on globalThis because Next bundles this file separately for server actions
+// and for instrumentation.ts (the daily scheduler); a module-level variable would
+// not be shared, so a button click during a scheduled run would start a second sync.
+const globalForSync = globalThis as unknown as {
+  smartsheetSyncPromise?: Promise<unknown> | null;
+};
 
 export async function syncSmartsheetToDb(): Promise<unknown> {
-  if (syncPromise) return syncPromise;
+  if (globalForSync.smartsheetSyncPromise) return globalForSync.smartsheetSyncPromise;
   if (!process.env.SMARTSHEET_API_TOKEN || !process.env.SMARTSHEET_SHEET_ID) {
     console.warn("[SmartsheetSync] SMARTSHEET_API_TOKEN or SMARTSHEET_SHEET_ID not set, skipping sync");
     return;
   }
-  syncPromise = (async () => {
+  const run = (async () => {
     try {
       console.log("[SmartsheetSync] Fetching latest data from Smartsheet API...");
       const { records, totalRows } = await fetchSmartsheetData();
@@ -118,8 +123,9 @@ export async function syncSmartsheetToDb(): Promise<unknown> {
     } catch (err) {
       console.error("[SmartsheetSync] Sync failed:", err instanceof Error ? err.message : err);
     } finally {
-      syncPromise = null;
+      globalForSync.smartsheetSyncPromise = null;
     }
   })();
-  return syncPromise;
+  globalForSync.smartsheetSyncPromise = run;
+  return run;
 }

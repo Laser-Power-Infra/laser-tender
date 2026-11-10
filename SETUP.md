@@ -217,6 +217,38 @@ schtasks /Run /TN "LaserTender_CostingScan"
 
 ---
 
+## Automatic daily Refresh + Allocate (inside the app)
+
+Separate from the nightly costing job above. The app itself can run what the dashboard's
+**Refresh Data** and **Allocate tender** buttons do, once a day. The buttons keep working
+as before. Nothing is installed on the server — it is switched on by one setting in the
+**app's** env (`D:\laser-tender\.env.production` for Docker):
+
+| Variable | Meaning |
+| --- | --- |
+| `AUTO_DAILY_RUN_TIME_IST` | Time of the daily run, 24-hour India time, e.g. `07:00`. **Not set = off.** |
+| `AUTO_ALLOCATE_AFTER_REFRESH` | Optional. Defaults to on. Set `false` to auto-refresh only (no auto-allocate). |
+
+After changing either one, recreate the container:
+
+```bat
+docker compose up -d --force-recreate laser-tender
+```
+
+- Each run does the refresh first, then the allocation. If the refresh does not complete,
+  allocation is skipped that day.
+- Auto-allocation follows the same rules as the button and is just as permanent: an
+  assigned tender cannot be reassigned from the dashboard.
+- Switch it on in **one place only** (the production container). Do not also set it on a
+  machine running the app against the production database.
+- If the app is restarting at exactly the run time, that day's run is missed; use the
+  buttons, or wait for the next day.
+- Check it ran: `docker logs laser-tender | findstr Scheduler`. At startup you should see
+  `[Scheduler] Next daily run: ...`; after a run, `Refresh done`, `Allocation done` and
+  the next run time.
+
+---
+
 ## Troubleshooting
 
 - **`[QueuePush] RABBITMQ_URL is not set` / connect failure** → ensure `RABBITMQ_URL`
