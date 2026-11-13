@@ -217,35 +217,34 @@ schtasks /Run /TN "LaserTender_CostingScan"
 
 ---
 
-## Automatic daily Refresh + Allocate (inside the app)
+## Automatic daily Refresh + Allocate (triggered by ofelia)
 
-Separate from the nightly costing job above. The app itself can run what the dashboard's
-**Refresh Data** and **Allocate tender** buttons do, once a day. The buttons keep working
-as before. Nothing is installed on the server — it is switched on by one setting in the
-**app's** env (`D:\laser-tender\.env.production` for Docker):
+Separate from the nightly costing job above. Once a day, **ofelia** (the scheduler in the
+`infrastructure` repo) calls the app, and the app does what the dashboard's
+**Refresh Data** and **Allocate tender** buttons do. The buttons keep working as before.
 
-| Variable | Meaning |
-| --- | --- |
-| `AUTO_DAILY_RUN_TIME_IST` | Time of the daily run, 24-hour India time, e.g. `07:00`. **Not set = off.** |
-| `AUTO_ALLOCATE_AFTER_REFRESH` | Optional. Defaults to on. Set `false` to auto-refresh only (no auto-allocate). |
-
-After changing either one, recreate the container:
-
-```bat
-docker compose up -d --force-recreate laser-tender
-```
-
-- Each run does the refresh first, then the allocation. If the refresh does not complete,
-  allocation is skipped that day.
+- **URL the app exposes:** `POST /api/scheduler/daily-refresh-allocate` with header
+  `x-api-key: <WORKER_API_KEY>` (same key as `/api/costing/refresh`). A `GET` with the
+  key only checks the key and returns `{"auth":"ok"}`. Body `{"allocate": false}` runs
+  the refresh only.
+- **Where the schedule lives:** `infrastructure/ofelia/config.ini`, job
+  `laser-tender-daily-refresh-allocate` (07:00 IST), which runs
+  `ofelia/scripts/api/laser-tender-daily-sync.sh`. Change the time there, not in this app.
+- **Settings:**
+  - app (`D:laser-tender.env.production`): `WORKER_API_KEY`
+  - ofelia (the infrastructure `.env`): `LASER_TENDER_SERVER=http://laser-tender:4173`
+    and `LASER_TENDER_API_KEY` = the same value as the app's `WORKER_API_KEY`.
+    After changing them: `docker compose up -d ofelia`.
+- Each run does the refresh first, then the allocation. If the refresh does not complete
+  (or saves nothing), allocation is skipped and the job reports `"success": false`, which
+  ofelia records as a failed run.
 - Auto-allocation follows the same rules as the button and is just as permanent: an
   assigned tender cannot be reassigned from the dashboard.
-- Switch it on in **one place only** (the production container). Do not also set it on a
-  machine running the app against the production database.
-- If the app is restarting at exactly the run time, that day's run is missed; use the
-  buttons, or wait for the next day.
-- Check it ran: `docker logs laser-tender | findstr Scheduler`. At startup you should see
-  `[Scheduler] Next daily run: ...`; after a run, `Refresh done`, `Allocation done` and
-  the next run time.
+- **Run it once by hand:** `docker exec ofelia sh /scripts/api/laser-tender-daily-sync.sh`
+- **Check it ran:** `docker logs ofelia` (job result) and
+  `docker logs laser-tender | findstr DailyJobs` (`Refresh done`, `Allocation done`).
+- The old in-app timer settings `AUTO_DAILY_RUN_TIME_IST` / `AUTO_ALLOCATE_AFTER_REFRESH`
+  are no longer used and can be removed from `.env.production`.
 
 ---
 

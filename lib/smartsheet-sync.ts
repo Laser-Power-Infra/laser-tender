@@ -87,9 +87,9 @@ async function fetchSmartsheetData(): Promise<{
   return { records, totalRows: rows.length };
 }
 
-// Kept on globalThis because Next bundles this file separately for server actions
-// and for instrumentation.ts (the daily scheduler); a module-level variable would
-// not be shared, so a button click during a scheduled run would start a second sync.
+// Kept on globalThis because Next can bundle this file separately for server actions
+// and for API routes (the scheduled daily job); a module-level variable would not be
+// shared, so a button click during a scheduled run would start a second sync.
 const globalForSync = globalThis as unknown as {
   smartsheetSyncPromise?: Promise<unknown> | null;
 };
