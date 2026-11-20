@@ -155,6 +155,9 @@ export default function TenderDetailSheet({
                 title={effectiveAllocatedTo ? "Assignment is permanent" : "Select an assignee"}
               >
                 <option value="">Select assignee</option>
+                {effectiveAllocatedTo && !allocatedToOptions.includes(effectiveAllocatedTo) && (
+                  <option value={effectiveAllocatedTo}>{effectiveAllocatedTo}</option>
+                )}
                 {allocatedToOptions.map(name => <option key={name} value={name}>{name}</option>)}
               </select>
             </label>

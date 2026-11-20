@@ -1,5 +1,10 @@
 import { syncSmartsheetToDb } from "@/lib/smartsheet-sync";
-import { applyTenderAllocationPlan, createTenderAllocationPlan } from "@/lib/tenderAllocation";
+import {
+  applyTenderAllocationPlan,
+  createTenderAllocationPlan,
+  TENDER_ALLOCATION_ASSIGNEES,
+  type TenderAllocationAssignee,
+} from "@/lib/tenderAllocation";
 
 // What the "Refresh Data" and "Allocate tender" buttons do, as one job: refresh
 // first, then allocate. Called by POST /api/scheduler/daily-refresh-allocate,
@@ -20,9 +25,7 @@ export interface DailyJobsResult {
     reason?: string;
     updated?: number;
     matched?: number;
-    PRITIKANA?: number;
-    RITWICK?: number;
-  };
+  } & Partial<Record<TenderAllocationAssignee, number>>;
   durationMs: number;
 }
 
@@ -103,10 +106,10 @@ export async function runDailyRefreshAndAllocate(
     } else {
       try {
         const plan = await applyTenderAllocationPlan(await createTenderAllocationPlan());
-        const perPerson = Object.values(plan.byCategory).reduce(
-          (sum, bucket) => ({ PRITIKANA: sum.PRITIKANA + bucket.PRITIKANA, RITWICK: sum.RITWICK + bucket.RITWICK }),
-          { PRITIKANA: 0, RITWICK: 0 },
-        );
+        const perPerson = Object.fromEntries(TENDER_ALLOCATION_ASSIGNEES.map((assignee) => [
+          assignee,
+          Object.values(plan.byCategory).reduce((sum, bucket) => sum + bucket[assignee], 0),
+        ])) as Record<TenderAllocationAssignee, number>;
         result.allocate = {
           status: "ok",
           updated: plan.totalUpdated,
@@ -115,7 +118,7 @@ export async function runDailyRefreshAndAllocate(
         };
         console.log(
           `[DailyJobs] Allocation done: ${plan.totalUpdated} of ${plan.totalMatched} unallocated tenders assigned ` +
-            `(PRITIKANA ${perPerson.PRITIKANA}, RITWICK ${perPerson.RITWICK})`,
+            `(${TENDER_ALLOCATION_ASSIGNEES.map((assignee) => `${assignee} ${perPerson[assignee]}`).join(", ")})`,
         );
       } catch (err) {
         allocationFailed = true;

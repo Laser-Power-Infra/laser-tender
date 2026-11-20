@@ -221,7 +221,8 @@ export class DatabaseSmartsheetService {
         where: { allocatedTo: { not: null } },
         select: { allocatedTo: true },
       });
-      if (!knownAssignees.some(row => row.allocatedTo?.trim() === assignee)) {
+      // allocatedTo may hold several names ("PRITIKANA, TASHMITA")
+      if (!knownAssignees.some(row => row.allocatedTo?.split(",").some(name => name.trim() === assignee))) {
         return { success: false, error: "Invalid assignee" };
       }
       const result = await prisma.smartsheetTender.updateMany({
@@ -261,7 +262,8 @@ export class DatabaseSmartsheetService {
         where: { allocatedTo: { not: null } },
         select: { allocatedTo: true },
       });
-      if (!knownAssignees.some(row => row.allocatedTo?.trim() === assignee)) {
+      // allocatedTo may hold several names ("PRITIKANA, TASHMITA")
+      if (!knownAssignees.some(row => row.allocatedTo?.split(",").some(name => name.trim() === assignee))) {
         return { success: false, error: "Invalid assignee" };
       }
       const source = await prisma.smartsheetTender.findUnique({

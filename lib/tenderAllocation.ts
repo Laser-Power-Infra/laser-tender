@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-export const TENDER_ALLOCATION_ASSIGNEES = ["PRITIKANA", "RITWICK"] as const;
+export const TENDER_ALLOCATION_ASSIGNEES = ["PRITIKANA", "RITWICK", "TASHMITA", "AKASH"] as const;
 export const TENDER_ALLOCATION_ACCOUNT_HOLDERS = ["PUJA AGARWAL", "SK TOUHID ALAM"] as const;
 export const TENDER_ALLOCATION_CATEGORIES = ["null", "tender", "budgetary", "purchase"] as const;
 
@@ -28,12 +28,7 @@ export interface TenderAllocationAssignment {
 export interface TenderAllocationPlan {
   totalMatched: number;
   totalUpdated: number;
-  byCategory: Record<TenderAllocationCategory, {
-    total: number;
-    PRITIKANA: number;
-    RITWICK: number;
-    skipped: number;
-  }>;
+  byCategory: Record<TenderAllocationCategory, { total: number; skipped: number } & Record<TenderAllocationAssignee, number>>;
   rows: TenderAllocationAssignment[];
 }
 
@@ -47,12 +42,11 @@ export function classifyTenderPurchase(value: string | null): TenderAllocationCa
 }
 
 function emptyPlan(): TenderAllocationPlan["byCategory"] {
-  return {
-    null: { total: 0, PRITIKANA: 0, RITWICK: 0, skipped: 0 },
-    tender: { total: 0, PRITIKANA: 0, RITWICK: 0, skipped: 0 },
-    budgetary: { total: 0, PRITIKANA: 0, RITWICK: 0, skipped: 0 },
-    purchase: { total: 0, PRITIKANA: 0, RITWICK: 0, skipped: 0 },
-  };
+  return Object.fromEntries(TENDER_ALLOCATION_CATEGORIES.map((category) => [category, {
+    total: 0,
+    skipped: 0,
+    ...Object.fromEntries(TENDER_ALLOCATION_ASSIGNEES.map((assignee) => [assignee, 0])),
+  }])) as TenderAllocationPlan["byCategory"];
 }
 
 function compareDocket(a: TenderAllocationRow, b: TenderAllocationRow): number {
@@ -77,7 +71,11 @@ export async function createTenderAllocationPlan(): Promise<TenderAllocationPlan
 
   const byCategory = emptyPlan();
   const assignments: TenderAllocationAssignment[] = [];
-  let assignmentIndex = 0;
+  // Continue the rotation where earlier runs stopped: restarting at 0 would hand
+  // every small daily batch to the first names in the list.
+  let assignmentIndex = await prisma.smartsheetTender.count({
+    where: { allocatedTo: { in: [...TENDER_ALLOCATION_ASSIGNEES] } },
+  });
 
   for (const category of TENDER_ALLOCATION_CATEGORIES) {
     const categoryRows = grouped.get(category)!;

@@ -41,7 +41,7 @@ const pool = new pg.Pool({ connectionString, max: 5, connectionTimeoutMillis: 15
 const client = new PrismaClient({ adapter: new PrismaPg(pool) });
 
 const categories = ["null", "tender", "budgetary", "purchase"];
-const assignees = ["PRITIKANA", "RITWICK"];
+const assignees = ["PRITIKANA", "RITWICK", "TASHMITA", "AKASH"];
 const accountHolders = ["PUJA AGARWAL", "SK TOUHID ALAM"];
 const classify = (value) => {
   const normalized = value?.trim().toLowerCase() ?? "";
@@ -64,10 +64,11 @@ try {
   }
 
   const byCategory = Object.fromEntries(categories.map((category) => [category, {
-    total: 0, PRITIKANA: 0, RITWICK: 0, skipped: 0,
+    total: 0, skipped: 0, ...Object.fromEntries(assignees.map((assignee) => [assignee, 0])),
   }]));
   const assignments = [];
-  let index = 0;
+  // Same rotation start as lib/tenderAllocation.ts.
+  let index = await client.smartsheetTender.count({ where: { allocatedTo: { in: assignees } } });
   for (const category of categories) {
     for (const row of grouped.get(category)) {
       const assignee = assignees[index++ % assignees.length];

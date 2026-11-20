@@ -30,6 +30,10 @@ type SortDir = "asc" | "desc";
 // through the existing MultiSelectDropdown/ColumnFilter as a normal option.
 const BLANK = "(Blank)";
 
+// "Allocated To" can hold several people, e.g. "PRITIKANA, TASHMITA".
+const splitNames = (val: string | null | undefined): string[] =>
+  (val ?? "").split(",").map(name => name.trim()).filter(Boolean);
+
 interface ColDef {
   key: SortField;
   label: string;
@@ -476,7 +480,8 @@ const TenderDashboardPage: React.FC = () => {
         return next;
       });
       const summary = Object.entries(result.allocationSummary || {})
-        .map(([category, counts]) => `${category}: ${counts.PRITIKANA}/${counts.RITWICK}${counts.skipped ? ` (${counts.skipped} skipped)` : ""}`)
+        .map(([category, { total: _total, skipped, ...people }]) =>
+          `${category}: ${Object.entries(people).map(([name, count]) => `${name} ${count}`).join(", ")}${skipped ? ` (${skipped} skipped)` : ""}`)
         .join("\n");
       window.alert(`Allocated ${result.updatedCount ?? 0} tenders.\n${summary}`);
     } catch (err) {
@@ -585,9 +590,9 @@ const TenderDashboardPage: React.FC = () => {
           const val = (row.docketNumber && allocatedToOverrides.hasOwnProperty(row.docketNumber))
             ? allocatedToOverrides[row.docketNumber]
             : row.allocatedTo;
-          const t = val?.trim();
-          if (selected.includes(BLANK) && !t) return true;
-          return !!t && selected.includes(t);
+          const names = splitNames(val);
+          if (selected.includes(BLANK) && names.length === 0) return true;
+          return names.some(name => selected.includes(name));
         });
         return;
       }
@@ -749,7 +754,8 @@ const TenderDashboardPage: React.FC = () => {
           const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
             ? allocatedToOverrides[r.docketNumber]
             : r.allocatedTo;
-          if (val?.trim()) set.add(val.trim());
+          const names = splitNames(val);
+          if (names.length) names.forEach(name => set.add(name));
           else hasBlank = true;
           return;
         }
@@ -823,9 +829,9 @@ const TenderDashboardPage: React.FC = () => {
       const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
         ? allocatedToOverrides[r.docketNumber]
         : r.allocatedTo;
-      const person = val?.trim();
-      if (person) {
-        counts[person] = (counts[person] || 0) + 1;
+      const names = splitNames(val);
+      if (names.length) {
+        names.forEach(person => { counts[person] = (counts[person] || 0) + 1; });
       } else {
         unallocated += 1;
       }
@@ -836,9 +842,7 @@ const TenderDashboardPage: React.FC = () => {
       const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
         ? allocatedToOverrides[r.docketNumber]
         : r.allocatedTo;
-      if (val?.trim()) {
-        allPersonsSet.add(val.trim());
-      }
+      splitNames(val).forEach(name => allPersonsSet.add(name));
     });
 
     return {
@@ -1662,6 +1666,7 @@ const TenderDashboardPage: React.FC = () => {
                                       title={isAssigned ? "Assignment is permanent" : "Select an assignee"}
                                     >
                                       <option value="">Select assignee</option>
+                                      {assignedTo && splitNames(assignedTo).length > 1 && <option value={assignedTo}>{assignedTo}</option>}
                                       {allocatedToCounts.map(({ name }) => <option key={name} value={name}>{name}</option>)}
                                     </select>
                                     {savingAllocated[row.docketNumber || ""] && (

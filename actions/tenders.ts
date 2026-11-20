@@ -6,7 +6,7 @@ import { decryptStoredPath, isPlainUrl } from "@/services/costingFileFinder.mjs"
 import { publishTenderParsingTask } from "@/lib/tenderQueue";
 import { syncSmartsheetToDb } from "@/lib/smartsheet-sync";
 import { prisma } from "@/lib/prisma";
-import { applyTenderAllocationPlan, createTenderAllocationPlan } from "@/lib/tenderAllocation";
+import { applyTenderAllocationPlan, createTenderAllocationPlan, type TenderAllocationPlan } from "@/lib/tenderAllocation";
 
 export interface TenderActionResponse<T = unknown> {
   success: boolean;
@@ -15,7 +15,7 @@ export interface TenderActionResponse<T = unknown> {
   summary?: { matched: number; total: number };
   updatedCount?: number;
   updatedDocketNumbers?: string[];
-  allocationSummary?: Record<string, { total: number; PRITIKANA: number; RITWICK: number; skipped: number }>;
+  allocationSummary?: TenderAllocationPlan["byCategory"];
   scanSummary?: { scanned: number; matched: number; notFound: number; total: number; remaining: number };
   queueSummary?: { total: number; published: number; failed: number; skippedNoUrl: number; skippedParsed: number };
 }
