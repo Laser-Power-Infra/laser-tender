@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "CostingScanRun" ADD COLUMN     "appsheetCount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "networkCount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "noAttachment" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "parsedCount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "source" TEXT NOT NULL DEFAULT 'scan';

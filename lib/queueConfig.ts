@@ -1,3 +1,3 @@
 export const QUEUES = {
-  TENDER_PARSING: "tender:parsing",
+  TENDER_PARSING: "automation-v2:parsing",
 } as const;

@@ -410,14 +410,22 @@ export async function refreshCostingData(): Promise<{
   matchedCount: number;
   totalCount: number;
 }> {
+  const startedAt = Date.now();
+  console.log("[CostingRefresh] Start — loading tenders from DB...");
   const records = await DatabaseSmartsheetService.getAllSmartsheetTenders();
   const totalCount = records.length;
+  console.log(`[CostingRefresh] Loaded ${totalCount} tenders`);
+
+  console.log("[CostingRefresh] Fetching costing sheet (AppSheet/Drive)...");
   const enriched = await enrichWithCostingData(records);
   const matchedCount = enriched.filter((r) => r.attachmentUrl).length;
+  console.log(`[CostingRefresh] Enriched — matched ${matchedCount}/${totalCount}`);
 
   if (enriched.length > 0) {
+    console.log(`[CostingRefresh] Upserting ${enriched.length} records to DB...`);
     await DatabaseSmartsheetService.bulkUpsertSmartsheetTenders(enriched);
   }
+  console.log(`[CostingRefresh] Done in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
 
   return { data: enriched, matchedCount, totalCount };
 }

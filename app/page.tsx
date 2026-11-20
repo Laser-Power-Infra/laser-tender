@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useSmartsheetTenders } from "@/hooks/useSmartsheetTenders";
 import { SmartsheetTender } from "@/types/smartsheetTender";
 import TenderDetailSheet from "@/components/TenderDetailSheet";
@@ -19,10 +19,16 @@ import {
   updateTenderEmailSubjectLine,
   updateTenderLostStillScope,
   getCostingScanRuns,
+  allocateTenders,
 } from "@/actions/tenders";
 
 type SortField = keyof SmartsheetTender;
 type SortDir = "asc" | "desc";
+
+// Sentinel option value shown in every column filter dropdown. Selecting it
+// filters the column's blank/empty cells. Kept as a plain string so it rides
+// through the existing MultiSelectDropdown/ColumnFilter as a normal option.
+const BLANK = "(Blank)";
 
 interface ColDef {
   key: SortField;
@@ -68,7 +74,8 @@ function cmp(a: string | null, b: string | null, dir: SortDir): number {
 /** Format raw date string "YYYY-MM-DD" → "DD-MMM-YY" for display */
 function formatDate(raw: string | null): string | null {
   if (!raw) return null;
-  const d = new Date(raw);
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw.trim());
+  const d = iso ? new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])) : new Date(raw);
   if (isNaN(d.getTime())) return raw;
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
 }
@@ -164,15 +171,13 @@ const TenderDashboardPage: React.FC = () => {
   const [scanSummary, setScanSummary] = useState<{ scanned: number; matched: number; notFound: number; total: number; remaining: number } | null>(null);
   const [scanHistory, setScanHistory] = useState<any[]>([]);
   const [pushingQueue, setPushingQueue] = useState(false);
+  const [allocatingTenders, setAllocatingTenders] = useState(false);
   const [queueSummary, setQueueSummary] = useState<{ total: number; published: number; failed: number; skippedNoUrl: number; skippedParsed: number } | null>(null);
   const [queueTestMode, setQueueTestMode] = useState(true);
   const [queueTestDockets, setQueueTestDockets] = useState("");
   const [page, setPage]           = useState(1);
   const [pageSize, setPageSize]   = useState(50);
 
-  // Inline editing state for Allocated To
-  const [editingAllocatedTo, setEditingAllocatedTo] = useState<string | null>(null);
-  const [editAllocatedValue, setEditAllocatedValue] = useState("");
   const [savingAllocated, setSavingAllocated] = useState<Record<string, boolean>>({});
   const [allocatedToOverrides, setAllocatedToOverrides] = useState<Record<string, string | null>>({});
 
@@ -233,7 +238,6 @@ const TenderDashboardPage: React.FC = () => {
   // Open dropdown per column + inner panel search per column
   const [openColDropdown, setOpenColDropdown] = useState<string | null>(null);
   const [colPanelSearch, setColPanelSearch] = useState<Record<string, string>>({});
-  const colDropdownRef = useRef<HTMLDivElement | null>(null);
 
   // Specialized filters states
   const [enquiryStartDate, setEnquiryStartDate] = useState("");
@@ -251,14 +255,10 @@ const TenderDashboardPage: React.FC = () => {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        colDropdownRef.current &&
-        openColDropdown &&
-        !colDropdownRef.current.contains(event.target as Node) &&
-        !(event.target as Element)?.closest(".multiselect-dropdown-panel")
-      ) {
-        setOpenColDropdown(null);
-      }
+      if (!openColDropdown) return;
+      const target = event.target as Element | null;
+      if (target?.closest(".custom-multiselect-container")) return;
+      setOpenColDropdown(null);
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -313,37 +313,30 @@ const TenderDashboardPage: React.FC = () => {
     document.addEventListener("mouseup", handleMouseUp);
   };
 
-  const handleSaveAllocatedTo = async (docketNumber: string) => {
-    if (savingAllocated[docketNumber]) return;
-    const newValue = editAllocatedValue;
+  const handleAssignAllocatedTo = async (docketNumber: string, newValue: string) => {
+    if (!newValue.trim() || savingAllocated[docketNumber]) return;
     setSavingAllocated(prev => ({ ...prev, [docketNumber]: true }));
     try {
-      const json = await updateTenderAllocatedTo(docketNumber, newValue || null);
+      const json = await updateTenderAllocatedTo(docketNumber, newValue);
       if (json.success) {
         setAllocatedToOverrides(prev => ({ ...prev, [docketNumber]: newValue }));
-
-        const currentRow = data.find(r => r.docketNumber === docketNumber);
-        const partyName = currentRow?.partyName;
-        if (partyName) {
-          const samePartyRows = data.filter(
-            r => r.partyName === partyName && r.docketNumber !== docketNumber
-          );
-          if (samePartyRows.length > 0) {
-            const batchDocketNumbers = samePartyRows.map(r => r.docketNumber!);
-            setAllocatedToOverrides(prev => {
-              const next = { ...prev };
-              batchDocketNumbers.forEach(dn => { next[dn] = newValue; });
-              return next;
-            });
-            batchUpdateAllocatedTo(batchDocketNumbers, newValue || null).catch(err => console.error("Batch auto-fill failed:", err));
-          }
+        const batchResult = await batchUpdateAllocatedTo(docketNumber, newValue);
+        if (batchResult.success && batchResult.updatedDocketNumbers?.length) {
+          setAllocatedToOverrides(prev => {
+            const next = { ...prev };
+            batchResult.updatedDocketNumbers!.forEach(dn => { next[dn] = newValue; });
+            return next;
+          });
+        } else if (!batchResult.success) {
+          console.error("Same-party auto-fill failed:", batchResult.error);
         }
+      } else {
+        console.error("Failed to assign tender:", json.error);
       }
     } catch (err) {
-      console.error("Failed to update Allocated To:", err);
+      console.error("Failed to assign Allocated To:", err);
     } finally {
       setSavingAllocated(prev => ({ ...prev, [docketNumber]: false }));
-      setEditingAllocatedTo(null);
     }
   };
 
@@ -364,7 +357,7 @@ const TenderDashboardPage: React.FC = () => {
     }
   };
 
-  const handleSaveReverseAuction = async (docketNumber: string, value: string) => {
+  const handleSaveReverseAuction = async (docketNumber: string, value: string | null) => {
     if (savingReverseAuction[docketNumber]) return;
     setSavingReverseAuction(prev => ({ ...prev, [docketNumber]: true }));
     try {
@@ -457,6 +450,39 @@ const TenderDashboardPage: React.FC = () => {
       console.error("Sync failed:", err);
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleAllocateTenders = async () => {
+    if (allocatingTenders) return;
+    setAllocatingTenders(true);
+    try {
+      const result = await allocateTenders();
+      if (!result.success) {
+        window.alert(result.error || "Failed to allocate tenders.");
+        return;
+      }
+      const assignments = (result.data || []) as {
+        docketNumber: string | null;
+        after: { allocatedTo: string | null };
+      }[];
+      setAllocatedToOverrides((previous) => {
+        const next = { ...previous };
+        for (const assignment of assignments) {
+          if (assignment.docketNumber && assignment.after.allocatedTo) {
+            next[assignment.docketNumber] = assignment.after.allocatedTo;
+          }
+        }
+        return next;
+      });
+      const summary = Object.entries(result.allocationSummary || {})
+        .map(([category, counts]) => `${category}: ${counts.PRITIKANA}/${counts.RITWICK}${counts.skipped ? ` (${counts.skipped} skipped)` : ""}`)
+        .join("\n");
+      window.alert(`Allocated ${result.updatedCount ?? 0} tenders.\n${summary}`);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to allocate tenders.");
+    } finally {
+      setAllocatingTenders(false);
     }
   };
 
@@ -559,14 +585,16 @@ const TenderDashboardPage: React.FC = () => {
           const val = (row.docketNumber && allocatedToOverrides.hasOwnProperty(row.docketNumber))
             ? allocatedToOverrides[row.docketNumber]
             : row.allocatedTo;
-          if (selected.includes("(blank)") && !val) return true;
-          return val && selected.includes(val.trim());
+          const t = val?.trim();
+          if (selected.includes(BLANK) && !t) return true;
+          return !!t && selected.includes(t);
         });
         return;
       }
 
       if (key === "proposedErpItemName") {
         rows = rows.filter(row => {
+          if (selected.includes(BLANK) && !row.proposedErpItemName) return true;
           if (!row.proposedErpItemName) return false;
           const rowItems = row.proposedErpItemName.split(/\n+/).map(p => p.trim()).filter(Boolean);
           return rowItems.some(item => selected.includes(item));
@@ -586,6 +614,7 @@ const TenderDashboardPage: React.FC = () => {
             { label: "Steel", price: row.galvanisedSteelFlatStripPrice },
             { label: "Filler", price: row.fillerPrice }
           ].filter(m => m.price !== null && m.price !== undefined && m.price !== 0);
+          if (selected.includes(BLANK) && activeRates.length === 0) return true;
           return activeRates.some(m => selected.includes(m.label));
         });
         return;
@@ -602,7 +631,7 @@ const TenderDashboardPage: React.FC = () => {
       if (key === "LostStillScope") {
         rows = rows.filter(row => {
           const v = getEffectiveLostStillScope(row, lostStillScopeOverrides);
-          if (selected.includes("(blank)") && v === "") return true;
+          if (selected.includes(BLANK) && v === "") return true;
           return v !== "" && selected.includes(v);
         });
         return;
@@ -610,6 +639,7 @@ const TenderDashboardPage: React.FC = () => {
 
       rows = rows.filter(row => {
         const v = cellText(row, key);
+        if (selected.includes(BLANK) && v === "") return true;
         return v !== "" && selected.includes(v);
       });
     });
@@ -687,6 +717,10 @@ const TenderDashboardPage: React.FC = () => {
     COLUMNS.forEach(col => {
       const key = col.key;
       const set = new Set<string>();
+      // "(Blank)" is only offered when the column actually has blank cells in the
+      // cascaded rows, so it cascades like any other option. attachmentUrl already
+      // has "Has/No Attachment", so it never shows "(Blank)".
+      let hasBlank = false;
       const rows = applyFilters(data, [key]);
       rows.forEach(r => {
         if (key === "proposedErpItemName" && r.proposedErpItemName) {
@@ -707,7 +741,8 @@ const TenderDashboardPage: React.FC = () => {
             { label: "Steel", price: r.galvanisedSteelFlatStripPrice },
             { label: "Filler", price: r.fillerPrice }
           ].filter(m => m.price !== null && m.price !== undefined && m.price !== 0);
-          activeRates.forEach(m => set.add(m.label));
+          if (activeRates.length > 0) activeRates.forEach(m => set.add(m.label));
+          else hasBlank = true;
           return;
         }
         if (key === "allocatedTo") {
@@ -715,7 +750,7 @@ const TenderDashboardPage: React.FC = () => {
             ? allocatedToOverrides[r.docketNumber]
             : r.allocatedTo;
           if (val?.trim()) set.add(val.trim());
-          else set.add("(blank)");
+          else hasBlank = true;
           return;
         }
         if (key === "attachmentUrl") {
@@ -725,12 +760,14 @@ const TenderDashboardPage: React.FC = () => {
         if (key === "LostStillScope") {
           const v = getEffectiveLostStillScope(r, lostStillScopeOverrides);
           if (v) set.add(v);
-          else set.add("(blank)");
+          else hasBlank = true;
           return;
         }
         const v = cellText(r, key);
         if (v !== "") set.add(v);
+        else hasBlank = true;
       });
+      if (hasBlank) set.add(BLANK);
       map[key] = Array.from(set).sort();
     });
     return map;
@@ -776,9 +813,12 @@ const TenderDashboardPage: React.FC = () => {
   ]);
 
   // Allocated To counts for assigned persons sidebar cards (cascading calculation)
-  const allocatedToCounts = useMemo(() => {
+  // unallocatedCount uses the same cascaded rows as the person counts, so the
+  // Unallocated card's number follows the other filters like they do.
+  const { allocatedToCounts, unallocatedCount } = useMemo(() => {
     const rows = applyFilters(data, ["allocatedTo"]);
     const counts: Record<string, number> = {};
+    let unallocated = 0;
     rows.forEach(r => {
       const val = (r.docketNumber && allocatedToOverrides.hasOwnProperty(r.docketNumber))
         ? allocatedToOverrides[r.docketNumber]
@@ -786,6 +826,8 @@ const TenderDashboardPage: React.FC = () => {
       const person = val?.trim();
       if (person) {
         counts[person] = (counts[person] || 0) + 1;
+      } else {
+        unallocated += 1;
       }
     });
 
@@ -799,12 +841,16 @@ const TenderDashboardPage: React.FC = () => {
       }
     });
 
-    return Array.from(allPersonsSet)
-      .map(name => ({ name, count: counts[name] || 0 }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    return {
+      allocatedToCounts: Array.from(allPersonsSet)
+        .map(name => ({ name, count: counts[name] || 0 }))
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+      unallocatedCount: unallocated,
+    };
   }, [
     data,
     allocatedToOverrides,
+    lostStillScopeOverrides,
     search,
     colSearches,
     colFilterSelected,
@@ -849,6 +895,12 @@ const TenderDashboardPage: React.FC = () => {
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const pageStart  = (page - 1) * pageSize;
   const paginated  = sorted.slice(pageStart, pageStart + pageSize);
+
+  // If the list shrinks while on a later page (e.g. rows leave the Unallocated
+  // view after "Allocate tender"), step back to the last page that still has rows.
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const handleSort = (field: SortField) => {
     if (field === sortField) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -995,7 +1047,9 @@ const TenderDashboardPage: React.FC = () => {
   const totalRecords   = data.length;
   const tenderCount    = data.filter(r => r.tenderPurchase?.toLowerCase().includes("tender")).length;
   const purchaseCount  = data.filter(r => r.tenderPurchase?.toLowerCase().includes("purchase")).length;
+  const unclassifiedCount = totalRecords - tenderCount - purchaseCount;
   const withQuotation  = data.filter(r => r.quotationNumber).length;
+  const unallocatedActive = (colFilterSelected["allocatedTo"] || []).includes(BLANK);
 
   return (
     <div className="tender-layout-container">
@@ -1013,10 +1067,16 @@ const TenderDashboardPage: React.FC = () => {
           <div className="tender-stat-card">
             <div className="tender-stat-label">Tenders</div>
             <div className="tender-stat-value" style={{ color: "#ff6b6b" }}>{tenderCount.toLocaleString()}</div>
+            <div className="tender-stat-sub">incl. Laser Tender</div>
           </div>
           <div className="tender-stat-card">
             <div className="tender-stat-label">Purchases</div>
             <div className="tender-stat-value" style={{ color: "#38ef7d" }}>{purchaseCount.toLocaleString()}</div>
+          </div>
+          <div className="tender-stat-card">
+            <div className="tender-stat-label">Unclassified</div>
+            <div className="tender-stat-value" style={{ color: "#ffc857" }}>{unclassifiedCount.toLocaleString()}</div>
+            <div className="tender-stat-sub">Budgetary or blank type</div>
           </div>
           <div className="tender-stat-card">
             <div className="tender-stat-label">With Quotation</div>
@@ -1054,7 +1114,23 @@ const TenderDashboardPage: React.FC = () => {
 
           {/* Assigned Tenders By Person */}
           <div className="assigned-tenders-section">
+            <button
+              className="tender-refresh-sidebar-btn"
+              onClick={handleAllocateTenders}
+              disabled={loading || allocatingTenders}
+              style={{ marginBottom: 10 }}
+            >
+              {allocatingTenders ? "Allocating..." : "Allocate tender"}
+            </button>
             <div className="assigned-tenders-title">ASSIGNED TENDERS BY PERSON</div>
+            <div
+              className={`assigned-tender-card${unallocatedActive ? " active" : ""}`}
+              onClick={(e) => handleAllocatedCardClick(BLANK, e)}
+              title="Click to filter unallocated"
+            >
+              <span className="assigned-tender-name">Unallocated</span>
+              <span className="assigned-tender-count">{unallocatedCount}</span>
+            </div>
             {allocatedToCounts.length === 0 ? (
               <div style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.45)", fontStyle: "italic", padding: "4px 0" }}>
                 {loading ? "Loading assigned persons..." : "No assigned persons found"}
@@ -1086,7 +1162,7 @@ const TenderDashboardPage: React.FC = () => {
           >
             {syncing ? "🔄 Syncing..." : "🔄 Refresh Data"}
           </button>
-          <button
+          {/* <button
             className="tender-refresh-sidebar-btn"
             onClick={handleRefreshCosting}
             disabled={loading || costingRefreshing}
@@ -1161,14 +1237,25 @@ const TenderDashboardPage: React.FC = () => {
                     <span style={{ fontWeight: 700, color: r.status === "error" ? "#ff6b6b" : r.status === "running" ? "#ffd93d" : "#6bffb8" }}>
                       {r.status}
                     </span>
-                    {" · "}found {r.matched}/{r.scanned}
-                    {" · "}{r.notFound} missing{r.failed > 0 ? ` · ${r.failed} failed` : ""}
+                    {r.source === "nightly" ? (
+                      <>
+                        {" · "}Net {r.networkCount} · AppSheet {r.appsheetCount}
+                        {" · "}none {r.noAttachment} · parsed {r.parsedCount}
+                        {" · "}queued {r.queuePublished ?? 0}
+                        {(r.queueFailed ?? 0) > 0 ? ` · ${r.queueFailed} q-failed` : ""}
+                      </>
+                    ) : (
+                      <>
+                        {" · "}found {r.matched}/{r.scanned}
+                        {" · "}{r.notFound} missing{r.failed > 0 ? ` · ${r.failed} failed` : ""}
+                      </>
+                    )}
                     {typeof r.durationMs === "number" ? ` · ${(r.durationMs / 60000).toFixed(1)} min` : ""}
                   </div>
                 ))}
               </div>
             </div>
-          )}
+          )} */}
         </div>
       </aside>
 
@@ -1512,7 +1599,7 @@ const TenderDashboardPage: React.FC = () => {
                             <td style={{ fontFamily: "monospace", fontWeight: 600, color: "#0a2540" }} title={row.contractNo ?? undefined}>
                               {row.contractNo ? (
                                 row.contractNo.includes(",") ? (
-                                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                                  <div className="tender-item-stack" style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                                     {row.contractNo.split(",").map((c) => c.trim()).filter(Boolean).map((c, i) => (
                                       <span key={i} style={{ display: "inline-block", background: "#e8f0fe", padding: "1px 5px", borderRadius: "3px", border: "1px solid #d2e3fc", fontSize: "11px", width: "fit-content" }}>{c}</span>
                                     ))}
@@ -1532,14 +1619,16 @@ const TenderDashboardPage: React.FC = () => {
                                   <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
                                     <button
                                       className={`ra-toggle-btn ${effective === "Lost" ? "ra-no" : "ra-inactive"}`}
+                                      aria-pressed={effective === "Lost"}
                                       disabled={!!savingLostStillScope[row.docketNumber!]}
-                                      onClick={() => row.docketNumber && handleSaveLostStillScope(row.docketNumber, "Lost")}
-                                    >Lost</button>
+                                      onClick={() => row.docketNumber && handleSaveLostStillScope(row.docketNumber, effective === "Lost" ? null : "Lost")}
+                                    >{effective === "Lost" ? "✓ Lost" : "Lost"}</button>
                                     <button
                                       className={`ra-toggle-btn ${effective === "Still Scope" ? "ra-yes" : "ra-inactive"}`}
+                                      aria-pressed={effective === "Still Scope"}
                                       disabled={!!savingLostStillScope[row.docketNumber!]}
-                                      onClick={() => row.docketNumber && handleSaveLostStillScope(row.docketNumber, "Still Scope")}
-                                    >Still Scope</button>
+                                      onClick={() => row.docketNumber && handleSaveLostStillScope(row.docketNumber, effective === "Still Scope" ? null : "Still Scope")}
+                                    >{effective === "Still Scope" ? "✓ Still Scope" : "Still Scope"}</button>
                                     {!!savingLostStillScope[row.docketNumber!] && <span style={{ fontSize: 10, color: "#999" }}>...</span>}
                                   </div>
                                 );
@@ -1547,7 +1636,9 @@ const TenderDashboardPage: React.FC = () => {
                             </td>
                             {/* Quotation Date */}
                             <td>
-                              {row.quotationDate ?? <span className="smartsheet-null-cell">—</span>}
+                              {row.quotationDate
+                                ? <span className="enquiry-date-badge">{formatDate(row.quotationDate)}</span>
+                                : <span className="smartsheet-null-cell">—</span>}
                             </td>
                             {/* Account Holder */}
                             <td>
@@ -1555,50 +1646,30 @@ const TenderDashboardPage: React.FC = () => {
                             </td>
                             {/* Allocated To */}
                             <td>
-                              {editingAllocatedTo === row.docketNumber ? (
-                                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                  <input
-                                    type="text"
-                                    className="allocated-edit-input"
-                                    value={editAllocatedValue}
-                                    autoFocus
-                                    onChange={e => setEditAllocatedValue(e.target.value)}
-                                    onBlur={() => row.docketNumber && handleSaveAllocatedTo(row.docketNumber)}
-                                    onKeyDown={e => {
-                                      if (e.key === "Enter") {
-                                        e.preventDefault();
-                                        (e.target as HTMLInputElement).blur();
-                                      } else if (e.key === "Escape") {
-                                        setEditingAllocatedTo(null);
-                                      }
-                                    }}
-                                  />
-                                  {savingAllocated[row.docketNumber!] && (
-                                    <span style={{ fontSize: 10, color: "#999" }}>...</span>
-                                  )}
-                                </div>
-                              ) : (
-                                <div
-                                  className="allocated-to-display"
-                                  onClick={() => {
-                                    if (!row.docketNumber || savingAllocated[row.docketNumber]) return;
-                                    setEditingAllocatedTo(row.docketNumber);
-                                    setEditAllocatedValue(
-                                      row.docketNumber && allocatedToOverrides.hasOwnProperty(row.docketNumber)
-                                        ? allocatedToOverrides[row.docketNumber] ?? ""
-                                        : row.allocatedTo ?? ""
-                                    );
-                                  }}
-                                  title="Click to edit"
-                                >
-                                  {row.docketNumber && allocatedToOverrides.hasOwnProperty(row.docketNumber)
-                                    ? allocatedToOverrides[row.docketNumber] ?? <span className="smartsheet-null-cell">—</span>
-                                    : row.allocatedTo ?? <span className="smartsheet-null-cell">—</span>}
-                                  {!savingAllocated[row.docketNumber!] && (
-                                    <span className="allocated-edit-icon">✎</span>
-                                  )}
-                                </div>
-                              )}
+                              {(() => {
+                                const assignedTo = row.docketNumber && allocatedToOverrides.hasOwnProperty(row.docketNumber)
+                                  ? allocatedToOverrides[row.docketNumber]
+                                  : row.allocatedTo;
+                                const isAssigned = !!assignedTo?.trim();
+                                return (
+                                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                    <select
+                                      className="allocated-to-select"
+                                      value={assignedTo ?? ""}
+                                      disabled={isAssigned || !row.docketNumber || !!savingAllocated[row.docketNumber]}
+                                      onChange={e => row.docketNumber && handleAssignAllocatedTo(row.docketNumber, e.target.value)}
+                                      aria-label={`Allocate ${row.docketNumber || "tender"}`}
+                                      title={isAssigned ? "Assignment is permanent" : "Select an assignee"}
+                                    >
+                                      <option value="">Select assignee</option>
+                                      {allocatedToCounts.map(({ name }) => <option key={name} value={name}>{name}</option>)}
+                                    </select>
+                                    {savingAllocated[row.docketNumber || ""] && (
+                                      <span style={{ fontSize: 10, color: "#999" }}>...</span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </td>
                             {/* Status */}
                             <td
@@ -1833,14 +1904,14 @@ const TenderDashboardPage: React.FC = () => {
                                     <button
                                       className={`ra-toggle-btn ${effectiveVal === "yes" ? "ra-yes" : "ra-inactive"}`}
                                       disabled={savingReverseAuction[row.docketNumber!]}
-                                      onClick={() => row.docketNumber && handleSaveReverseAuction(row.docketNumber, "yes")}
+                                      onClick={() => row.docketNumber && handleSaveReverseAuction(row.docketNumber, effectiveVal === "yes" ? null : "yes")}
                                     >
                                       Yes
                                     </button>
                                     <button
                                       className={`ra-toggle-btn ${effectiveVal === "no" ? "ra-no" : "ra-inactive"}`}
                                       disabled={savingReverseAuction[row.docketNumber!]}
-                                      onClick={() => row.docketNumber && handleSaveReverseAuction(row.docketNumber, "no")}
+                                      onClick={() => row.docketNumber && handleSaveReverseAuction(row.docketNumber, effectiveVal === "no" ? null : "no")}
                                     >
                                       No
                                     </button>
@@ -2053,33 +2124,9 @@ const TenderDashboardPage: React.FC = () => {
             savingEmailSubject={selectedTender.docketNumber ? !!savingEmailSubject[selectedTender.docketNumber] : false}
             savingReverseAuction={selectedTender.docketNumber ? !!savingReverseAuction[selectedTender.docketNumber] : false}
             savingLostStillScope={selectedTender.docketNumber ? !!savingLostStillScope[selectedTender.docketNumber] : false}
-            onSaveAllocatedTo={async val => {
-              if (!selectedTender.docketNumber) return;
-              const dn = selectedTender.docketNumber;
-              if (savingAllocated[dn]) return;
-              setSavingAllocated(prev => ({ ...prev, [dn]: true }));
-              try {
-                const json = await updateTenderAllocatedTo(dn, val || null);
-                if (json.success) {
-                  setAllocatedToOverrides(prev => ({ ...prev, [dn]: val }));
-                  const currentRow = data.find(r => r.docketNumber === dn);
-                  const partyName = currentRow?.partyName;
-                  if (partyName) {
-                    const samePartyRows = data.filter(r => r.partyName === partyName && r.docketNumber !== dn);
-                    if (samePartyRows.length > 0) {
-                      const batchDocketNumbers = samePartyRows.map(r => r.docketNumber!);
-                      setAllocatedToOverrides(prev => {
-                        const next = { ...prev };
-                        batchDocketNumbers.forEach(d => { next[d] = val; });
-                        return next;
-                      });
-                      batchUpdateAllocatedTo(batchDocketNumbers, val || null).catch(err => console.error("Batch auto-fill failed:", err));
-                    }
-                  }
-                }
-              } finally {
-                setSavingAllocated(prev => ({ ...prev, [dn]: false }));
-              }
+            allocatedToOptions={allocatedToCounts.map(({ name }) => name)}
+            onSaveAllocatedTo={val => {
+              if (selectedTender.docketNumber) handleAssignAllocatedTo(selectedTender.docketNumber, val);
             }}
             onSaveStatus={async val => {
               if (!selectedTender.docketNumber) return;
@@ -2129,7 +2176,7 @@ const TenderDashboardPage: React.FC = () => {
                 setSavingEmailSubject(prev => ({ ...prev, [dn]: false }));
               }
             }}
-            onSaveReverseAuction={(val: string) => {
+            onSaveReverseAuction={(val: string | null) => {
               if (!selectedTender.docketNumber) return;
               handleSaveReverseAuction(selectedTender.docketNumber!, val);
             }}

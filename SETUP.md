@@ -1,16 +1,33 @@
-# Nightly Costing-File Scan — Server Setup
+# Nightly Costing Job — Server Setup
 
-This guide sets up the **scheduled nightly costing-file scan** on the Windows server
+This guide sets up the **scheduled nightly costing job** on the Windows server
 `192.168.1.190` (which hosts the codebase and the PostgreSQL DB).
 
-The scan reuses the existing script `scripts/scanCostingFiles.mjs`: it reads dockets
-that have **no** `attachmentUrl` from the `SmartsheetTender` table, recursively searches
-the costing network folder, and stores the matching Excel file path (encrypted) back in
-the DB.
+The job runs four steps, in order:
 
-Every run is recorded in the new **`CostingScanRun`** table and shown on the dashboard
-(sidebar → "COSTING SCAN HISTORY"): how many dockets were searched, how many files were
-found, not found, failed, duration and status.
+1. **Google Sheet costing sync** — calls the app's `/api/costing/refresh` endpoint
+   (the same logic as the "Costing from sheet" button, `refreshCostingData`). It reads
+   the "TENDER COSTING ATTACHMENT" Google Sheet and stores each docket's
+   `attachmentUrl` from the sheet in the DB.
+2. **Network costing-file search** — runs `scripts/scanCostingFiles.mjs`: it reads
+   dockets that still have **no** `attachmentUrl` from the `SmartsheetTender` table,
+   recursively searches the costing network folder, and stores the matching Excel file
+   path (encrypted) back in the DB.
+3. **Queue push** — runs `scripts/pushCostingToQueue.mjs`: it publishes a
+   `COSTING_ATTACHMENT_PARSING` task per docket (with an attachment URL and no parsed
+   costing yet) to RabbitMQ queue `automation-v2:parsing`, including `client_id`
+   (from `AUTOMATION_V2_CLIENT_ID`) so automation-v2 can send the webhook back.
+4. **Nightly breakdown report** — runs `scripts/costingJobReport.mjs`: it counts the
+   post-job state — total tenders, network attachments (ENC1.), AppSheet/Drive URLs
+   (http), dockets with no attachment, and dockets already parsed.
+
+Every network-scan run (step 2) **and** the nightly breakdown (step 4) are recorded in
+the **`CostingScanRun`** table and shown on the dashboard (sidebar → "COSTING SCAN
+HISTORY"). Scan rows show searched/found/missing; "nightly" rows show
+`Net · AppSheet · none · parsed · queued` (network attachments / AppSheet-Drive URLs /
+no attachment / parsed costing / tasks published to the parsing queue).
+Step 3 (`pushCostingToQueue.mjs`) writes its summary to `logs\last-queue-push.json`,
+which step 4 reads for the `queued` count.
 
 ---
 
@@ -50,6 +67,19 @@ Make sure these exist (values should match what the running app uses):
 | `COSTING_PATH_ENCRYPTION_KEY` | **MUST be identical** to the key already used on other machines. Existing encrypted paths in the DB were encrypted with this key; if it differs, decrypting old records and the dashboard download will break. |
 | `COSTING_NIGHTLY_SCAN_LIMIT` | dockets to search per run (e.g. `500`). **Set this** so each night finishes in time (see below). |
 | `COSTING_SCAN_RETRY_DAYS` | optional; how many days before a docket that was searched but not found is retried (default `7`). |
+| `WORKER_API_KEY` | **required for step 1.** Sent by the trigger script as `x-api-key` to the app's `/api/costing/refresh`. |
+| `COSTING_SYNC_APP_URL` | optional; base URL of the running app used by the trigger script (default `http://localhost:4173`). |
+| `GOOGLE_CLIENT_EMAIL` / `GOOGLE_PRIVATE_KEY` | **required for step 1.** These live in the **app's** env (`.env.production` for Docker); the running app needs them to read the Google Sheet. |
+| `RABBITMQ_URL` | **required for step 3.** e.g. `amqp://guest:guest@192.168.1.190:5672` — the queue push publishes `automation-v2:parsing` tasks here. |
+| `AUTOMATION_V2_CLIENT_ID` | **required for webhooks.** The `whk_…` client ID from the automation-v2 `/webhooks` page. It is added to every `COSTING_ATTACHMENT_PARSING` payload; without it the job runs but no webhook is sent back. |
+| `AUTOMATION_V2_WEBHOOK_SECRET` | optional. The `whsec_…` secret used to verify inbound webhooks on `/api/costing/parsed`. When unset, signature verification is skipped (flow works but the endpoint is unauthenticated). |
+
+> **Step 1 needs the app running.** The sheet sync is triggered via the running app at
+> `COSTING_SYNC_APP_URL` (default `http://localhost:4173`). If the app is down, step 1
+> logs a failure but steps 2 and 3 still proceed.
+>
+> **Step 3 publishes real tasks.** Dockets that are already parsed (have `cvaValue` /
+> `proposedQty`) are skipped, so re-running it nightly is safe.
 
 > **Why a limit is needed:** searching one docket can take 30–60s (it walks the costing
 > tree recursively). Scanning all ~1,778 missing dockets in one go would run 10–20h. The
@@ -59,10 +89,22 @@ Make sure these exist (values should match what the running app uses):
 > Found files are stored immediately; not-found dockets are retried after the retry
 > window (files often appear later).
 
-## 4. Test the scan once (manual)
+## 4. Test the job once (manual)
+
+Test step 1 (sheet sync via the app — needs the app running, e.g. dev on `:4123` or
+prod on `:4173`):
 
 ```bat
 cd /d D:\laser-tenders
+set COSTING_SYNC_APP_URL=http://localhost:4173
+node scripts/triggerCostingSheetSync.mjs
+```
+
+Expect output like `[SheetSync] OK — matched 3417/5249`.
+
+Then test step 2 (network scan):
+
+```bat
 node scripts/scanCostingFiles.mjs --limit 5
 ```
 
@@ -80,14 +122,53 @@ Remaining  : 1775
 
 Then check the dashboard — "COSTING SCAN HISTORY" should show a new row.
 
+Then test step 3 (queue push — publishes to RabbitMQ):
+
+```bat
+node scripts/pushCostingToQueue.mjs --limit 5
+```
+
+Expect output like:
+
+```
+[QueuePush] 5 eligible (3417 no-url, 1827 already parsed)
+[QueuePush] Connecting to RabbitMQ...
+[QueuePush] ── SUMMARY ──
+Eligible         : 5
+Published        : 5
+Failed           : 0
+Skipped (no URL) : 3417
+Skipped (parsed) : 1827
+```
+
 > Each searched docket sets its `costingScanAttemptedAt`. Not-found dockets are retried
 > after `COSTING_SCAN_RETRY_DAYS` (default 7), so leave the nightly job running even
 > after a backfill — new tenders arrive from Smartsheet and files appear over time.
 
+Then test step 4 (nightly breakdown report):
+
+```bat
+node scripts/costingJobReport.mjs
+```
+
+Expect output like:
+
+```
+[JobReport] ── NIGHTLY COSTING BREAKDOWN ──
+Total tenders        : 5293
+Network attachments  : 25
+AppSheet/Drive URLs  : 3652
+No attachment        : 1616
+Parsed costing       : 3553
+```
+
 ## 5. Create the scheduled task (Windows Task Scheduler)
 
-Use the wrapper `run-costing-scan.cmd` (it `cd`s to the repo, runs the script and writes
-console output to `logs\costing-scan-console.log`).
+Use the wrapper `run-costing-scan.cmd` (it `cd`s to the repo, runs **step 1 sheet sync,
+step 2 network scan, step 3 queue push, step 4 breakdown report**, and writes console
+output to `logs\costing-scan-console.log`).
+No re-registration is needed if you already created the task — it runs this file fresh
+each time, so just deploy the updated `.cmd`.
 
 Register as **"run whether user is logged on or not"** so it runs nightly even with no
 one logged in. Set the time (`/ST`, 24-hour format) to your preferred time:
@@ -120,15 +201,66 @@ schtasks /Run /TN "LaserTender_CostingScan"
 
 ## 6. Check the reports
 
-- **Dashboard**: side panel → "COSTING SCAN HISTORY" lists the last 15 runs
-  (status, found/matched, missing, failed, duration).
-- **Console log**: `D:\laser-tenders\logs\costing-scan-console.log` — full output of
-  every run, including the summary and any errors.
+- **Dashboard**: side panel → "COSTING SCAN HISTORY" lists the last 15 runs. Scan rows
+  show status, found/matched, missing, failed, duration. "nightly" rows show
+  `Net · AppSheet · none · parsed · queued` (network / AppSheet-Drive /
+  no-attachment / parsed / published to the parsing queue).
+- **Logs** (in `D:\laser-tenders\logs\`):
+  - `costing-scan-console.log` — master timeline: STEP banners + each step's full
+    output, accumulating every run.
+  - `costing-sheet-sync.log` — step 1 (latest run only).
+  - `costing-network-scan.log` — step 2 (latest run only).
+  - `costing-queue-push.log` — step 3 (latest run only).
+  - `costing-job-report.log` — step 4 (latest run only).
+- **Console**: when the job runs in a visible window, each step prints
+  `===== STEP n: ... START/DONE/FAILED =====` so you can watch progress live.
+
+---
+
+## Automatic daily Refresh + Allocate (triggered by ofelia)
+
+Separate from the nightly costing job above. Once a day, **ofelia** (the scheduler in the
+`infrastructure` repo) calls the app, and the app does what the dashboard's
+**Refresh Data** and **Allocate tender** buttons do. The buttons keep working as before.
+
+- **URL the app exposes:** `POST /api/scheduler/daily-refresh-allocate` with header
+  `x-api-key: <WORKER_API_KEY>` (same key as `/api/costing/refresh`). A `GET` with the
+  key only checks the key and returns `{"auth":"ok"}`. Body `{"allocate": false}` runs
+  the refresh only.
+- **Where the schedule lives:** `infrastructure/ofelia/config.ini`, job
+  `laser-tender-daily-refresh-allocate` (07:00 IST), which runs
+  `ofelia/scripts/api/laser-tender-daily-sync.sh`. Change the time there, not in this app.
+- **Settings:**
+  - app (`D:laser-tender.env.production`): `WORKER_API_KEY`
+  - ofelia (the infrastructure `.env`): `LASER_TENDER_SERVER=http://laser-tender:4173`
+    and `LASER_TENDER_API_KEY` = the same value as the app's `WORKER_API_KEY`.
+    After changing them: `docker compose up -d ofelia`.
+- Each run does the refresh first, then the allocation. If the refresh does not complete
+  (or saves nothing), allocation is skipped and the job reports `"success": false`, which
+  ofelia records as a failed run.
+- Auto-allocation follows the same rules as the button and is just as permanent: an
+  assigned tender cannot be reassigned from the dashboard.
+- **Run it once by hand:** `docker exec ofelia sh /scripts/api/laser-tender-daily-sync.sh`
+- **Check it ran:** `docker logs ofelia` (job result) and
+  `docker logs laser-tender | findstr DailyJobs` (`Refresh done`, `Allocation done`).
+- The old in-app timer settings `AUTO_DAILY_RUN_TIME_IST` / `AUTO_ALLOCATE_AFTER_REFRESH`
+  are no longer used and can be removed from `.env.production`.
 
 ---
 
 ## Troubleshooting
 
+- **`[QueuePush] RABBITMQ_URL is not set` / connect failure** → ensure `RABBITMQ_URL`
+  is in the repo `.env` and RabbitMQ is reachable (e.g. `192.168.1.190:5672`). Step 3
+  is skipped on failure but steps 1–2 still run.
+- **`[SheetSync] Request failed: ...`** → the app isn't reachable at
+  `COSTING_SYNC_APP_URL` (default `http://localhost:4173`). Confirm the app is running
+  and the port is right.
+- **`[SheetSync] ... reported failure` / HTTP 401** → `WORKER_API_KEY` in the repo `.env`
+  doesn't match the app's `WORKER_API_KEY`.
+- **Sheet sync returns `matched 0`** → the running app lacks the Google creds
+  (`GOOGLE_CLIENT_EMAIL` / `GOOGLE_PRIVATE_KEY`) in its env, or it has no network access
+  to `sheets.googleapis.com`. The network scan step still runs.
 - **`[CostingFileFinder] Network path not accessible: ...`** → the task's account cannot
   reach the share. Use the UNC path in `COSTING_FILE_NETWORK_PATH` and confirm the task
   user has read access to `\\192.168.1.242\dipankar roy`.

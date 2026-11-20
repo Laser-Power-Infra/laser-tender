@@ -6,6 +6,7 @@ import { decryptStoredPath, isPlainUrl } from "@/services/costingFileFinder.mjs"
 import { publishTenderParsingTask } from "@/lib/tenderQueue";
 import { syncSmartsheetToDb } from "@/lib/smartsheet-sync";
 import { prisma } from "@/lib/prisma";
+import { applyTenderAllocationPlan, createTenderAllocationPlan } from "@/lib/tenderAllocation";
 
 export interface TenderActionResponse<T = unknown> {
   success: boolean;
@@ -13,6 +14,8 @@ export interface TenderActionResponse<T = unknown> {
   error?: string;
   summary?: { matched: number; total: number };
   updatedCount?: number;
+  updatedDocketNumbers?: string[];
+  allocationSummary?: Record<string, { total: number; PRITIKANA: number; RITWICK: number; skipped: number }>;
   scanSummary?: { scanned: number; matched: number; notFound: number; total: number; remaining: number };
   queueSummary?: { total: number; published: number; failed: number; skippedNoUrl: number; skippedParsed: number };
 }
@@ -27,6 +30,25 @@ export async function getSmartsheetTenders(): Promise<TenderActionResponse> {
       success: false,
       data: [],
       error: err instanceof Error ? err.message : "An unexpected server error occurred.",
+    };
+  }
+}
+
+export async function allocateTenders(): Promise<TenderActionResponse> {
+  try {
+    const plan = await createTenderAllocationPlan();
+    const result = await applyTenderAllocationPlan(plan);
+    return {
+      success: true,
+      data: result.rows,
+      updatedCount: result.totalUpdated,
+      allocationSummary: result.byCategory,
+    };
+  } catch (err) {
+    console.error("[TenderAllocation] Error:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to allocate tenders.",
     };
   }
 }
@@ -141,9 +163,9 @@ export async function updateTenderStatus(docketNumber: string, status: string | 
   }
 }
 
-export async function updateTenderReverseAuction(docketNumber: string, value: string): Promise<TenderActionResponse> {
+export async function updateTenderReverseAuction(docketNumber: string, value: string | null): Promise<TenderActionResponse> {
   try {
-    const result = await DatabaseSmartsheetService.updateSmartsheetTenderReverseAuction(docketNumber, value);
+    const result = await DatabaseSmartsheetService.updateSmartsheetTenderReverseAuction(docketNumber, value ?? null);
     if (!result.success) return { success: false, error: result.error || "Record not found" };
     return { success: true };
   } catch (err) {
@@ -152,19 +174,23 @@ export async function updateTenderReverseAuction(docketNumber: string, value: st
 }
 
 export async function batchUpdateAllocatedTo(
-  docketNumbers: string[],
-  allocatedTo: string | null
+  sourceDocketNumber: string,
+  allocatedTo: string
 ): Promise<TenderActionResponse> {
   try {
-    if (!Array.isArray(docketNumbers) || docketNumbers.length === 0) {
-      return { success: false, error: "docketNumbers must be a non-empty array" };
+    if (!sourceDocketNumber || !allocatedTo.trim()) {
+      return { success: false, error: "A source docket and assignee are required" };
     }
     const result = await DatabaseSmartsheetService.batchUpdateSmartsheetTenderAllocatedTo(
-      docketNumbers,
-      allocatedTo ?? null
+      sourceDocketNumber,
+      allocatedTo
     );
     if (!result.success) return { success: false, error: result.error || "Update failed" };
-    return { success: true, updatedCount: result.updatedCount };
+    return {
+      success: true,
+      updatedCount: result.updatedCount,
+      updatedDocketNumbers: result.updatedDocketNumbers,
+    };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : "Unexpected error" };
   }
@@ -255,6 +281,8 @@ export async function pushCostingToQueue(opts?: { docketNumbers?: string[]; test
 
     const total = eligible.length;
 
+    const clientId = (process.env.AUTOMATION_V2_CLIENT_ID || "").trim();
+
     for (const tender of eligible) {
       const stored = (tender.attachmentUrl || "").trim();
 
@@ -267,7 +295,7 @@ export async function pushCostingToQueue(opts?: { docketNumbers?: string[]; test
       } else {
         const decrypted = decryptStoredPath(stored);
         if (decrypted) {
-          // Network path — decrypted relative path ("network|...").
+          // Network path — decrypted relative path ("costing|...").
           fileLink = decrypted;
           fileType = "network";
         }
@@ -275,17 +303,32 @@ export async function pushCostingToQueue(opts?: { docketNumbers?: string[]; test
 
       if (!fileLink) continue;
 
-      const payload = {
-        type: "COSTING_ATTACHMENT_PARSING" as const,
+      // automation-v2 payload: network files use file_type:"network" +
+      // decrypted_fileId ("costing|<rel>"); external files use file_link.
+      const payload: {
+        type: "COSTING_ATTACHMENT_PARSING";
+        referenceNo: string;
+        client_id?: string;
+        file_link?: string;
+        file_type?: "network" | "external";
+        decrypted_fileId?: string;
+        sender: "laser_cost";
+        timestamp: number;
+      } = {
+        type: "COSTING_ATTACHMENT_PARSING",
         referenceNo: tender.docketNumber || "",
-        file_link: fileLink,
-        decrypted_fileId: fileLink,
-        file_type: fileType,
-        sender: "laser_cost" as const,
+        sender: "laser_cost",
         timestamp: Date.now(),
       };
+      if (clientId) payload.client_id = clientId;
+      if (fileType === "external") {
+        payload.file_link = fileLink;
+        payload.file_type = "external";
+      } else {
+        payload.file_type = "network";
+        payload.decrypted_fileId = fileLink;
+      }
 
-      // Testing only — just log the payload; publish is commented out.
       console.log("[QueuePush]", JSON.stringify(payload));
 
       const sent = await publishTenderParsingTask(payload);
