@@ -34,7 +34,7 @@ const COLUMNS: ColDef[] = [
   { key: "enquiryDate",     label: "Enquiry Date",      width: 200 },
   { key: "partyName",       label: "Party Name",         width: 220 },
   { key: "docketNumber",    label: "Docket Number",      width: 160 },
-  { key: "utility",         label: "Utility",            width: 200 },
+  { key: "utility",         label: "Location / Utility", width: 200 },
   { key: "quotationNumber", label: "Quotation Number",   width: 170 },
   { key: "contractNo",      label: "Contract Number",    width: 220 },
   { key: "LostStillScope" as SortField,  label: "Lost / Still Scope", width: 170 },
@@ -47,12 +47,12 @@ const COLUMNS: ColDef[] = [
   { key: "contactNo",       label: "Contact No",         width: 160 },
   { key: "reverseAuctionApplicable", label: "Reverse Auction",  width: 150 },
   { key: "cvaValue",            label: "CVA Value",          width: 120 },
-  { key: "tenderPurchase",      label: "Tender / Purchase",  width: 150 },
+  { key: "tenderPurchase",      label: "Tender / Purchase / Budgetary / Laser Tender", width: 300 },
   { key: "proposedErpItemName", label: "Item Name",          width: 250 },
   { key: "proposedQty",         label: "Tender Qty",         width: 140 },
   { key: "attachmentUrl",       label: "Attachment",         width: 150 },
   { key: "priceBasis",          label: "Price Basis",        width: 130 },
-  { key: "rawMaterials",        label: "Raw Materials",      width: 260 },
+  { key: "rawMaterials",        label: "Raw Materials / Rate (₹/kg)", width: 260 },
 ];
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
@@ -1500,7 +1500,7 @@ const TenderDashboardPage: React.FC = () => {
                             <td style={{ fontFamily: "monospace", fontWeight: 600, color: "#0a2540" }}>
                               {row.docketNumber ?? <span className="smartsheet-null-cell">—</span>}
                             </td>
-                            {/* Utility */}
+                            {/* Location / Utility */}
                             <td title={row.utility ?? undefined}>
                               {row.utility ?? <span className="smartsheet-null-cell">—</span>}
                             </td>
