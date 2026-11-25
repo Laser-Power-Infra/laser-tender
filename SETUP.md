@@ -11,7 +11,7 @@ The job runs four steps, in order:
    `attachmentUrl` from the sheet in the DB.
 2. **Network costing-file search** — runs `scripts/scanCostingFiles.mjs`: it reads
    dockets that still have **no** `attachmentUrl` from the `SmartsheetTender` table,
-   recursively searches the costing network folder, and stores the matching Excel file
+   recursively searches the costing network folder, and stores the matching Excel file 
    path (encrypted) back in the DB.
 3. **Queue push** — runs `scripts/pushCostingToQueue.mjs`: it publishes a
    `COSTING_ATTACHMENT_PARSING` task per docket (with an attachment URL and no parsed
