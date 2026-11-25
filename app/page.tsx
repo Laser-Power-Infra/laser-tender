@@ -335,7 +335,7 @@ const TenderDashboardPage: React.FC = () => {
           console.error("Same-party auto-fill failed:", batchResult.error);
         }
       } else {
-        console.error("Failed to assign tender:", json.error);
+        window.alert(json.error || "Could not save the change.");
       }
     } catch (err) {
       console.error("Failed to assign Allocated To:", err);
@@ -352,7 +352,7 @@ const TenderDashboardPage: React.FC = () => {
       const json = await updateTenderStatus(docketNumber, newValue || null);
       if (json.success) {
         setStatusOverrides(prev => ({ ...prev, [docketNumber]: newValue }));
-      }
+      } else window.alert(json.error || "Could not save the change.");
     } catch (err) {
       console.error("Failed to update Status:", err);
     } finally {
@@ -368,7 +368,7 @@ const TenderDashboardPage: React.FC = () => {
       const json = await updateTenderReverseAuction(docketNumber, value);
       if (json.success) {
         setReverseAuctionOverrides(prev => ({ ...prev, [docketNumber]: value }));
-      }
+      } else window.alert(json.error || "Could not save the change.");
     } catch (err) {
       console.error("Failed to update Reverse Auction:", err);
     } finally {
@@ -384,7 +384,7 @@ const TenderDashboardPage: React.FC = () => {
       const json = await updateTenderContactNo(docketNumber, newValue || null);
       if (json.success) {
         setContactNoOverrides(prev => ({ ...prev, [docketNumber]: newValue }));
-      }
+      } else window.alert(json.error || "Could not save the change.");
     } catch (err) {
       console.error("Failed to update Contact No:", err);
     } finally {
@@ -400,6 +400,7 @@ const TenderDashboardPage: React.FC = () => {
     try {
       const json = await updateTenderEmailId(docketNumber, newValue || null);
       if (json.success) setEmailIdOverrides(prev => ({ ...prev, [docketNumber]: newValue }));
+      else window.alert(json.error || "Could not save the change.");
     } catch (err) {
       console.error("Failed to update Email Id:", err);
     } finally {
@@ -415,6 +416,7 @@ const TenderDashboardPage: React.FC = () => {
     try {
       const json = await updateTenderEmailSubjectLine(docketNumber, newValue || null);
       if (json.success) setEmailSubjectOverrides(prev => ({ ...prev, [docketNumber]: newValue }));
+      else window.alert(json.error || "Could not save the change.");
     } catch (err) {
       console.error("Failed to update Email Subject:", err);
     } finally {
@@ -431,7 +433,7 @@ const TenderDashboardPage: React.FC = () => {
       if (json.success) {
         setLostStillScopeOverrides(prev => ({ ...prev, [docketNumber]: value }));
       } else {
-        console.error("Failed to update Lost/Still Scope:", json.error);
+        window.alert(json.error || "Could not save the change.");
       }
     } catch (err) {
       console.error("Failed to update Lost/Still Scope:", err);
@@ -446,7 +448,7 @@ const TenderDashboardPage: React.FC = () => {
     try {
       const json = await syncSmartsheetData();
       if (!json.success) {
-        console.error("Sync failed:", json.error);
+        window.alert(json.error || "Sync failed.");
       }
       // Polling will pick up new data within 30s; force reload to see immediately
       window.location.reload();
@@ -917,6 +919,7 @@ const TenderDashboardPage: React.FC = () => {
     setCostingSummary(null);
     const json = await refreshCosting();
     if (json.success && json.summary) setCostingSummary(json.summary);
+    if (!json.success) window.alert(json.error || "Failed to refresh costing data.");
     setCostingRefreshing(false);
   };
 
@@ -939,7 +942,7 @@ const TenderDashboardPage: React.FC = () => {
     try {
       const json = await scanCostingFiles();
       if (!json.success) {
-        console.error("Failed to scan costing files:", json.error);
+        window.alert(json.error || "Failed to scan costing files.");
         return;
       }
       setScanSummary(json.scanSummary || null);
@@ -960,7 +963,7 @@ const TenderDashboardPage: React.FC = () => {
         : undefined;
       const json = await pushCostingToQueue({ docketNumbers, testMode: queueTestMode });
       if (!json.success) {
-        console.error("Failed to push costing to queue:", json.error);
+        window.alert(json.error || "Failed to push costing to queue.");
         return;
       }
       setQueueSummary(json.queueSummary || null);
@@ -2141,6 +2144,7 @@ const TenderDashboardPage: React.FC = () => {
               try {
                 const json = await updateTenderStatus(dn, val || null);
                 if (json.success) setStatusOverrides(prev => ({ ...prev, [dn]: val }));
+                else window.alert(json.error || "Could not save the change.");
               } finally {
                 setSavingStatus(prev => ({ ...prev, [dn]: false }));
               }
@@ -2153,6 +2157,7 @@ const TenderDashboardPage: React.FC = () => {
               try {
                 const json = await updateTenderContactNo(dn, val || null);
                 if (json.success) setContactNoOverrides(prev => ({ ...prev, [dn]: val }));
+                else window.alert(json.error || "Could not save the change.");
               } finally {
                 setSavingContact(prev => ({ ...prev, [dn]: false }));
               }
@@ -2165,6 +2170,7 @@ const TenderDashboardPage: React.FC = () => {
               try {
                 const json = await updateTenderEmailId(dn, val || null);
                 if (json.success) setEmailIdOverrides(prev => ({ ...prev, [dn]: val }));
+                else window.alert(json.error || "Could not save the change.");
               } finally {
                 setSavingEmailId(prev => ({ ...prev, [dn]: false }));
               }
@@ -2177,6 +2183,7 @@ const TenderDashboardPage: React.FC = () => {
               try {
                 const json = await updateTenderEmailSubjectLine(dn, val || null);
                 if (json.success) setEmailSubjectOverrides(prev => ({ ...prev, [dn]: val }));
+                else window.alert(json.error || "Could not save the change.");
               } finally {
                 setSavingEmailSubject(prev => ({ ...prev, [dn]: false }));
               }

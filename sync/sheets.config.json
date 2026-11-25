@@ -1,0 +1,221 @@
+{
+  "_note": "IDs below come from the LASER costing project notes (24 Nov 2026). Items marked CONFIRM must be checked by whoever has Smartsheet / Drive admin access.",
+  "smartsheet": [
+    {
+      "key": "sales_enquiry",
+      "kind": "sales_enquiry",
+      "sheetId": "5621905471000452",
+      "name": "Sales Enquiry 3"
+    },
+    {
+      "key": "item_erp11",
+      "kind": "item_list",
+      "sheetId": "5887687107235716",
+      "name": "SALES ENQUIRY ITEM LIST ERP 11",
+      "itemList": "ERP 11"
+    },
+    {
+      "key": "item_erp10",
+      "kind": "item_list",
+      "sheetId": "7785205806092164",
+      "name": "SALES ENQUIRY ITEM LIST ERP 10",
+      "itemList": "ERP 10",
+      "_confirm": "notes list two ids for ERP 10 (7785205806092164 / 2033506099089284) - confirm whether both are item lists and add the second as item_erp10b"
+    },
+    {
+      "key": "item_erp9",
+      "kind": "item_list",
+      "sheetId": "1388756490735492",
+      "name": "SALES ENQUIRY ITEM LIST ERP 9",
+      "itemList": "ERP 9"
+    }
+  ],
+  "googleSheets": [
+    {
+      "key": "CIRCULARS",
+      "spreadsheetId": "1qATwj8rCRpyzpto_-ErKEbjKrEVEfAp0DLGJE7K47Go",
+      "tabs": [
+        {
+          "name": "DAILY RM RATES",
+          "headerRow": 1
+        },
+        {
+          "name": "DAILY MKT CP",
+          "headerRow": 2,
+          "_note": "checked live 24 Nov 2026: row 1 = latest values / ERP codes, row 2 = RM names, row 3 = SOURCE, row 4 = UOM, dates from row 5"
+        },
+        {
+          "name": "PV PROV open contracts",
+          "headerRow": 1,
+          "_note": "main PV worksheet: one row per Contract@Item@Lot, 79 cols. Factors + index values + PV value + ceiling + offer recommendation"
+        },
+        {
+          "name": "PV ITEM FACTORS",
+          "headerRow": 1,
+          "_note": "factors per ERP item (AlF, CuF, XLF, SMIF, FeF/FeW, CCF; WA/WF/WSc/WI/WO/WAL for conductors) + IEEMA PV FORMULA text"
+        },
+        {
+          "name": "PV FACTOR MASTER",
+          "headerRow": 1,
+          "_note": "IEEMA table factors (MT/km) keyed FAMILY|FACTOR|CORES|ARMOUR|VOLTAGE|SIZE"
+        },
+        {
+          "name": "PV INDEX MONTHLY",
+          "headerRow": 1,
+          "_note": "IEEMA monthly cable index (AL, CU, steel, PVC, XLPE LV/HV, PE, ZINC) with CIRCULAR/PROVISIONAL flag"
+        },
+        {
+          "name": "PV DATE RULE MAP",
+          "headerRow": 1,
+          "_note": "3 stacked sections: A ERP calendar codes PV1..PVG, B planning 'PV Terms' -> event date, C 'PV Days' code -> index date rule. Parse by section; the logic is already coded in costing/pv.ts"
+        },
+        {
+          "name": "PV LIVE STATUS",
+          "headerRow": 1
+        },
+        {
+          "name": "PV CONTRACT DOCS",
+          "headerRow": 1
+        },
+        {
+          "name": "PV OFFER LOG",
+          "headerRow": 1
+        },
+        {
+          "name": "PV BASE DATE LOG",
+          "headerRow": 1
+        },
+        {
+          "name": "N8N PV MAIL RAW",
+          "headerRow": 1,
+          "_note": "written by n8n workflows - read-only for the platform"
+        },
+        {
+          "name": "N8N BASE DATE RAW",
+          "headerRow": 1
+        },
+        {
+          "name": "IEEMA CABLES",
+          "headerRow": 4,
+          "_note": "header row to CONFIRM (frozen rows = 4)"
+        },
+        {
+          "name": "IEEMA CONDUCTOR",
+          "headerRow": 3,
+          "_note": "header row to CONFIRM"
+        },
+        {
+          "name": "CACMAI CONDUCTORS",
+          "headerRow": 4,
+          "_note": "header row to CONFIRM"
+        },
+        {
+          "name": "IEEMA PROV MCX",
+          "headerRow": 2
+        },
+        {
+          "name": "BALCO DECLARED",
+          "headerRow": 2
+        },
+        {
+          "name": "NALCO DECLARED",
+          "headerRow": 1
+        },
+        {
+          "name": "STEEL-RINL",
+          "headerRow": 4
+        },
+        {
+          "name": "ZINC-Price Circular",
+          "headerRow": 4
+        },
+        {
+          "name": "price list",
+          "headerRow": 2
+        },
+        {
+          "name": "STD DRUM COST",
+          "headerRow": 1
+        },
+        {
+          "name": "STD DRUM MAP",
+          "headerRow": 1
+        }
+      ],
+      "_note": "wide layout for DAILY RM RATES / DAILY MKT CP (dates as rows, RMs as columns) - pivot to rm_rate (long). PV tabs added 24 Nov 2026. Tabs 'PV PROV open contracts (old)' and 'Form Responses 1/3' are intentionally NOT synced (old copy / form raw data) - add if needed."
+    },
+    {
+      "key": "CLAUDE_COSTINGS",
+      "spreadsheetId": "108aUfQhqlXK1c7Lb9Gea7d4UqW2INuACfZv2186Onus",
+      "tabs": [
+        {
+          "name": "DRUM MASTER",
+          "headerRow": 1
+        },
+        {
+          "name": "DRUM BOM COST",
+          "headerRow": 1
+        },
+        {
+          "name": "DRUM LINES (old costings)",
+          "headerRow": 1
+        },
+        {
+          "name": "FREIGHT RATES",
+          "headerRow": 1
+        },
+        {
+          "name": "FREIGHT ABNORMAL",
+          "headerRow": 1
+        },
+        {
+          "name": "DRUMS PER TRUCK MASTER",
+          "headerRow": 1
+        },
+        {
+          "name": "REQ MULTIPLE FO",
+          "headerRow": 1
+        },
+        {
+          "name": "RM RATES",
+          "headerRow": 1
+        }
+      ],
+      "_note": "read-only inputs. The write tabs (SUMMARY, ITEM COSTING, RM DETAIL, PENDING COSTINGS, CLAUDE COSTING SHEETS) are replaced by costing_run / item_costing / rm_detail in the new DB; sync them ONCE for history only."
+    },
+    {
+      "key": "MASTER_BOM_ACTUAL",
+      "spreadsheetId": "1pdw9cLlIS2JsS-5zQxnW2sEtM5THrIF6hPra6mmOGb8",
+      "tabs": [
+        {
+          "name": "NON CHAIN BOM",
+          "headerRow": 3,
+          "_note": "checked live 24 Nov 2026: rows 1-2 = RM group labels, row 3 = FG Item / BOM Code / RM names, BOMs from row 4"
+        }
+      ]
+    }
+  ],
+  "googleSheetsDiscovery": {
+    "_note": "Power BI pages that still need their Google Sheet source identified (Power BI > dataset > Settings > Data source credentials, or Edit Power Query). Fill spreadsheetId/tabs here once known.",
+    "powerBiPages": [
+      "ITEM WISE BREAKUP",
+      "Quotation History",
+      "BOM MASTER",
+      "GTP MASTER",
+      "CSD MASTER",
+      "Bom Master Quad",
+      "Supply History",
+      "Type Test",
+      "Auto Quotation",
+      "Cost Calculation Sheet",
+      "Today's Rate Chart",
+      "No Erp Code",
+      "DD MASTER",
+      "Pree Aproved GTP",
+      "Attachment of Costing Sheet",
+      "Supply History for Sale Bill",
+      "QUOTATION EXPORT AND REVIEW",
+      "BOARD ATTACHMENT"
+    ]
+  }
+}

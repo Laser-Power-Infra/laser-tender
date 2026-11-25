@@ -1,6 +1,8 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { SmartsheetTender } from "@/types/smartsheetTender";
+import { getEnquiryDetail } from "@/actions/enquiries";
+import type { EnquiryDetail } from "@/lib/enquiryRead";
 
 function formatDate(raw: string | null): string | null {
   if (!raw) return null;
@@ -87,6 +89,17 @@ export default function TenderDetailSheet({
     document.body.style.overflow = "hidden";
     return () => { document.removeEventListener("keydown", onEsc); document.body.style.overflow = ""; };
   }, [open, onClose]);
+
+  // Full Smartsheet row + items, loaded when the panel opens (empty until the enquiry tables are deployed)
+  const [detail, setDetail] = useState<EnquiryDetail | null>(null);
+  const docket = tender?.docketNumber ?? null;
+  useEffect(() => {
+    setDetail(null);
+    if (!open || !docket) return;
+    let stale = false;
+    getEnquiryDetail(docket).then(d => { if (!stale) setDetail(d); }).catch(() => {});
+    return () => { stale = true; };
+  }, [open, docket]);
 
   if (!tender) return null;
 
@@ -296,6 +309,40 @@ export default function TenderDetailSheet({
               </div>
             )}
           </div>
+
+          {detail && detail.enquiry.length > 0 && docket && (
+            <div className="tender-detail-section" style={{ display: "flex", gap: 16 }}>
+              <a href={`/costing/${encodeURIComponent(docket)}`} style={{ color: "#1a73e8", textDecoration: "underline", fontWeight: 600 }}>Draft costing</a>
+              <a href={`/enquiries/${encodeURIComponent(docket)}/edit`} style={{ color: "#1a73e8", textDecoration: "underline", fontWeight: 600 }}>Edit enquiry / items</a>
+            </div>
+          )}
+
+          {detail && detail.enquiry.length > 0 && (
+            <details className="tender-detail-section">
+              <summary className="tender-detail-section-title" style={{ cursor: "pointer" }}>Full enquiry details ({detail.enquiry.length})</summary>
+              <div className="tender-detail-grid">
+                {detail.enquiry.map(f => (
+                  <div key={f.label} className="tender-detail-item"><span className="tender-detail-k">{f.label}</span><span className="tender-detail-v" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{f.value}</span></div>
+                ))}
+              </div>
+            </details>
+          )}
+
+          {detail && detail.items.length > 0 && (
+            <details className="tender-detail-section">
+              <summary className="tender-detail-section-title" style={{ cursor: "pointer" }}>Items ({detail.items.length})</summary>
+              {detail.items.map((item, i) => (
+                <div key={i} style={{ marginTop: 10 }}>
+                  <div className="tender-detail-k" style={{ marginBottom: 4 }}>Item {i + 1}</div>
+                  <div className="tender-detail-grid">
+                    {item.map(f => (
+                      <div key={f.label} className="tender-detail-item"><span className="tender-detail-k">{f.label}</span><span className="tender-detail-v" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{f.value}</span></div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </details>
+          )}
         </div>
 
         <div className="tender-detail-footer">

@@ -6,6 +6,7 @@ import { decryptStoredPath, isPlainUrl } from "@/services/costingFileFinder.mjs"
 import { publishTenderParsingTask } from "@/lib/tenderQueue";
 import { syncSmartsheetToDb } from "@/lib/smartsheet-sync";
 import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth";
 import { applyTenderAllocationPlan, createTenderAllocationPlan, type TenderAllocationPlan } from "@/lib/tenderAllocation";
 
 export interface TenderActionResponse<T = unknown> {
@@ -36,6 +37,7 @@ export async function getSmartsheetTenders(): Promise<TenderActionResponse> {
 
 export async function allocateTenders(): Promise<TenderActionResponse> {
   try {
+    await requireUser();
     const plan = await createTenderAllocationPlan();
     const result = await applyTenderAllocationPlan(plan);
     return {
@@ -72,6 +74,7 @@ export async function getCostingScanRuns(limit = 15): Promise<TenderActionRespon
 
 export async function syncSmartsheetData(): Promise<TenderActionResponse> {
   try {
+    await requireUser();
     const result: any = await syncSmartsheetToDb();
     // syncSmartsheetToDb returns {inserted, updated, skipped} or undefined on skip
     if (result && typeof result.inserted === "number") {
@@ -86,6 +89,7 @@ export async function syncSmartsheetData(): Promise<TenderActionResponse> {
 
 export async function refreshCosting(): Promise<TenderActionResponse> {
   try {
+    await requireUser();
     const result = await refreshCostingData();
     return {
       success: true,
@@ -104,6 +108,7 @@ export async function refreshCosting(): Promise<TenderActionResponse> {
 
 export async function scanCostingFiles(): Promise<TenderActionResponse> {
   try {
+    await requireUser();
     const result = (await DatabaseSmartsheetService.scanAndUpdateCostingFiles(
       Number(process.env.COSTING_SCAN_LIMIT || 100)
     )) as {
@@ -145,6 +150,7 @@ export async function updateTenderAllocatedTo(
   allocatedTo: string | null
 ): Promise<TenderActionResponse> {
   try {
+    await requireUser();
     const result = await DatabaseSmartsheetService.updateSmartsheetTenderAllocatedTo(docketNumber, allocatedTo ?? null);
     if (!result.success) return { success: false, error: result.error || "Record not found" };
     return { success: true };
@@ -155,6 +161,7 @@ export async function updateTenderAllocatedTo(
 
 export async function updateTenderStatus(docketNumber: string, status: string | null): Promise<TenderActionResponse> {
   try {
+    await requireUser();
     const result = await DatabaseSmartsheetService.updateSmartsheetTenderStatus(docketNumber, status ?? null);
     if (!result.success) return { success: false, error: result.error || "Record not found" };
     return { success: true };
@@ -165,6 +172,7 @@ export async function updateTenderStatus(docketNumber: string, status: string | 
 
 export async function updateTenderReverseAuction(docketNumber: string, value: string | null): Promise<TenderActionResponse> {
   try {
+    await requireUser();
     const result = await DatabaseSmartsheetService.updateSmartsheetTenderReverseAuction(docketNumber, value ?? null);
     if (!result.success) return { success: false, error: result.error || "Record not found" };
     return { success: true };
@@ -178,6 +186,7 @@ export async function batchUpdateAllocatedTo(
   allocatedTo: string
 ): Promise<TenderActionResponse> {
   try {
+    await requireUser();
     if (!sourceDocketNumber || !allocatedTo.trim()) {
       return { success: false, error: "A source docket and assignee are required" };
     }
@@ -201,6 +210,7 @@ export async function updateTenderContactNo(
   contactNo: string | null
 ): Promise<TenderActionResponse> {
   try {
+    await requireUser();
     const result = await DatabaseSmartsheetService.updateSmartsheetTenderContactNo(docketNumber, contactNo ?? null);
     if (!result.success) return { success: false, error: result.error || "Record not found" };
     return { success: true };
@@ -214,6 +224,7 @@ export async function updateTenderEmailId(
   emailId: string | null
 ): Promise<TenderActionResponse> {
   try {
+    await requireUser();
     const result = await DatabaseSmartsheetService.updateSmartsheetTenderEmailId(docketNumber, emailId ?? null);
     if (!result.success) return { success: false, error: result.error || "Record not found" };
     return { success: true };
@@ -227,6 +238,7 @@ export async function updateTenderEmailSubjectLine(
   emailSubjectLine: string | null
 ): Promise<TenderActionResponse> {
   try {
+    await requireUser();
     const result = await DatabaseSmartsheetService.updateSmartsheetTenderEmailSubjectLine(docketNumber, emailSubjectLine ?? null);
     if (!result.success) return { success: false, error: result.error || "Record not found" };
     return { success: true };
@@ -240,6 +252,7 @@ export async function updateTenderLostStillScope(
   value: string | null
 ): Promise<TenderActionResponse> {
   try {
+    await requireUser();
     const result = await DatabaseSmartsheetService.updateSmartsheetTenderLostStillScope(docketNumber, value ?? null);
     if (!result.success) return { success: false, error: result.error || "Record not found" };
     return { success: true };
@@ -250,6 +263,7 @@ export async function updateTenderLostStillScope(
 
 export async function pushCostingToQueue(opts?: { docketNumbers?: string[]; testMode?: boolean }): Promise<TenderActionResponse> {
   try {
+    await requireUser();
     const tenders = await DatabaseSmartsheetService.getAllSmartsheetTenders();
 
     const docketFilter = opts?.testMode && opts?.docketNumbers && opts.docketNumbers.length > 0

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { TabNav } from "@/components/TabNav";
+import { SessionProvider } from "@/components/SessionProvider";
 
 export const metadata: Metadata = {
   title: "LASERPOWER ENQUIRY Dashboard",
@@ -19,17 +20,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-        <TabNav />
-        <div
-          style={{
-            paddingTop: "42px",
-            height: "100vh",
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          {children}
-        </div>
+        <SessionProvider>
+          <TabNav />
+          <div
+            style={{
+              paddingTop: "42px",
+              height: "100vh",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            {children}
+          </div>
+        </SessionProvider>
       </body>
     </html>
   );

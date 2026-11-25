@@ -1,4 +1,6 @@
 import { DatabaseSmartsheetService } from "@/services/databaseSmartsheetService";
+import { pool } from "@/lib/prisma";
+import { runSmartsheetSync } from "@/sync/smartsheet_sync";
 
 export interface SmartsheetRecord {
   enquiryDate: string | null;
@@ -87,6 +89,26 @@ async function fetchSmartsheetData(): Promise<{
   return { records, totalRows: rows.length };
 }
 
+// Also fills the enquiry / enquiry_item tables. Never throws: the legacy sync result must not depend on it.
+async function syncEnquiryTables(): Promise<void> {
+  try {
+    // One dedicated connection: the sync wraps each sheet in BEGIN/COMMIT, which on the shared pool
+    // would land on different connections and leave one stuck inside an open transaction.
+    const client = await pool.connect();
+    try {
+      await runSmartsheetSync(client, process.env.SMARTSHEET_API_TOKEN!.trim());
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    if ((err as { code?: string })?.code === "42P01") {
+      console.warn("[SmartsheetSync] Enquiry tables not found (migration not deployed yet) — skipped enquiry sync");
+    } else {
+      console.error("[SmartsheetSync] Enquiry sync failed:", err instanceof Error ? err.message : err);
+    }
+  }
+}
+
 // Kept on globalThis because Next can bundle this file separately for server actions
 // and for API routes (the scheduled daily job); a module-level variable would not be
 // shared, so a button click during a scheduled run would start a second sync.
@@ -123,6 +145,7 @@ export async function syncSmartsheetToDb(): Promise<unknown> {
     } catch (err) {
       console.error("[SmartsheetSync] Sync failed:", err instanceof Error ? err.message : err);
     } finally {
+      await syncEnquiryTables();
       globalForSync.smartsheetSyncPromise = null;
     }
   })();

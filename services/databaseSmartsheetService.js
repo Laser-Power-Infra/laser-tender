@@ -1,4 +1,5 @@
-import { prisma } from "../lib/prisma";
+import { prisma, pool } from "../lib/prisma";
+import { readEnquiryTenders } from "../lib/enquiryRead";
 import { findCostingFileRecursive, extractNumericDocket, encryptStoredPath, buildStoredPath } from "./costingFileFinder.mjs";
 
 const cleanFloat = (val) => {
@@ -606,6 +607,14 @@ export class DatabaseSmartsheetService {
     if (!prisma) {
       console.warn("[DatabaseSmartsheetService] Prisma client unavailable; returning empty list.");
       return [];
+    }
+
+    // enquiry JOIN SmartsheetTender once the enquiry tables are deployed and filled; otherwise the legacy read below.
+    try {
+      const rows = await readEnquiryTenders(pool);
+      if (rows && rows.length > 0) return rows;
+    } catch (err) {
+      console.error("[DatabaseSmartsheetService] Enquiry read failed; using SmartsheetTender only:", err);
     }
 
     try {
