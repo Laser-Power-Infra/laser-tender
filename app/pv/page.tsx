@@ -1,6 +1,7 @@
 // "PV PROV open contracts": our PV per unit next to the sheet's own PV VALUE. Read-only, reads the synced Circulars tabs.
 import { pool } from "@/lib/prisma";
 import { mapPvRows, summarizePvRows, type PvRow, type SheetRow } from "@/lib/pvSheet";
+import { FilterTable, type FilterTableRow } from "@/components/FilterTable";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,42 @@ const COLS: [string, number][] = [
 const wrap = { whiteSpace: "normal" } as const, right = { textAlign: "right" } as const;
 const dash = <span className="smartsheet-null-cell">-</span>;
 
+/** text = what the column filters and search see; cells = the rich rendering. */
+function tableRow(r: PvRow): FilterTableRow {
+  return {
+    text: [
+      r.contract, `${r.itemCode} · ${r.itemName}`, r.lot || "", r.baseDate ?? "MISSING", r.applicableDate ?? "",
+      r.sheetPv == null ? r.sheetPvText || "" : inr(r.sheetPv) ?? "", r.pv == null ? "" : inr(r.pvCapped) ?? "", r.diff == null ? "" : inr(r.diff) ?? "",
+      r.pctPv == null ? "" : `${(r.pctPv * 100).toFixed(2)}%`, [r.advice, r.sheetAdvice].filter(Boolean).join(" | "), [r.note, ...r.warnings].filter(Boolean).join(" | "),
+    ],
+    cells: [
+      <div title={r.customer}>{r.contract}</div>,
+      <div title={r.itemName}>{r.itemCode} · {r.itemName}</div>,
+      <div>{r.lot || dash}</div>,
+      <div>{r.baseDate ?? <span className="short-close-badge">MISSING</span>}</div>,
+      <div>{r.applicableDate ?? dash}</div>,
+      <div style={r.sheetPv == null ? wrap : right}>{r.sheetPv == null ? r.sheetPvText || dash : inr(r.sheetPv)}</div>,
+      <div style={right}>
+        {r.pv == null ? dash : inr(r.pvCapped)}
+        {r.ceilingApplied && <div className="smartsheet-null-cell">ceiling applied (uncapped {inr(r.pv)})</div>}
+      </div>,
+      <div style={right}>
+        {r.status === "DIFFER" ? <span className="short-close-badge">{inr(r.diff)}</span> : r.diff == null ? dash : inr(r.diff)}
+      </div>,
+      <div style={right}>{r.pctPv == null ? dash : `${(r.pctPv * 100).toFixed(2)}%`}</div>,
+      <div style={wrap}>
+        {r.advice ?? dash}
+        {r.sheetAdvice && <div className="smartsheet-null-cell">sheet: {r.sheetAdvice}</div>}
+      </div>,
+      <div style={wrap}>
+        {r.note && <span className="short-close-badge" style={wrap}>{r.note}</span>}
+        {r.warnings.map(w => <div key={w}>{w}</div>)}
+        {!r.note && !r.warnings.length && dash}
+      </div>,
+    ],
+  };
+}
+
 export default async function PvPage() {
   const rows = await loadRows();
   return (
@@ -50,50 +87,7 @@ export default async function PvPage() {
               </p>
             </div>
           ) : (
-            <div className="smartsheet-table-container">
-              <div className="smartsheet-toolbar">
-                <div className="smartsheet-toolbar-left">
-                  <h3 className="smartsheet-table-title">PV per unit: sheet vs computed</h3>
-                  <span className="smartsheet-record-badge">{summarizePvRows(rows)}</span>
-                </div>
-              </div>
-              <div className="smartsheet-table-wrapper">
-                <table className="smartsheet-data-table" style={{ minWidth: COLS.reduce((a, [, w]) => a + w, 0) }}>
-                  <thead>
-                    <tr>{COLS.map(([label, width]) => <th key={label} style={{ width, cursor: "default" }}>{label}</th>)}</tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r, i) => (
-                      <tr key={`${r.key}#${i}`} className="smartsheet-row">
-                        <td title={r.customer}>{r.contract}</td>
-                        <td title={r.itemName}>{r.itemCode} · {r.itemName}</td>
-                        <td>{r.lot || dash}</td>
-                        <td>{r.baseDate ?? <span className="short-close-badge">MISSING</span>}</td>
-                        <td>{r.applicableDate ?? dash}</td>
-                        <td style={r.sheetPv == null ? wrap : right}>{r.sheetPv == null ? r.sheetPvText || dash : inr(r.sheetPv)}</td>
-                        <td style={right}>
-                          {r.pv == null ? dash : inr(r.pvCapped)}
-                          {r.ceilingApplied && <div className="smartsheet-null-cell">ceiling applied (uncapped {inr(r.pv)})</div>}
-                        </td>
-                        <td style={right}>
-                          {r.status === "DIFFER" ? <span className="short-close-badge">{inr(r.diff)}</span> : r.diff == null ? dash : inr(r.diff)}
-                        </td>
-                        <td style={right}>{r.pctPv == null ? dash : `${(r.pctPv * 100).toFixed(2)}%`}</td>
-                        <td style={wrap}>
-                          {r.advice ?? dash}
-                          {r.sheetAdvice && <div className="smartsheet-null-cell">sheet: {r.sheetAdvice}</div>}
-                        </td>
-                        <td style={wrap}>
-                          {r.note && <span className="short-close-badge" style={wrap}>{r.note}</span>}
-                          {r.warnings.map(w => <div key={w}>{w}</div>)}
-                          {!r.note && !r.warnings.length && dash}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <FilterTable title="PV per unit: sheet vs computed" badge={summarizePvRows(rows)} cols={COLS.map(([label, width]) => ({ label, width }))} rows={rows.map(tableRow)} />
           )}
         </main>
       </div>

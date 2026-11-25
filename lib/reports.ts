@@ -1,8 +1,6 @@
 // Read-only report queries replacing the Power BI pages whose source is known (docs/enquiry-platform/POWERBI_PAGE_MAP.md).
 import type { Db } from '../sync/lib.ts';
 
-export const PAGE_SIZE = 100;
-
 // Each query aliases its visible columns to the header text; `order` may use extra (hidden) columns.
 export const REPORTS: Record<string, { label: string; cols: string[]; sql: string; order: string }> = {
   items: {
@@ -43,12 +41,8 @@ export const REPORTS: Record<string, { label: string; cols: string[]; sql: strin
   },
 };
 
-/** One page of a report. `q` searches every column. Throws pg 42P01 while the tables are not deployed. */
-export async function runReport(db: Db, key: string, q: string, page: number): Promise<{ rows: Record<string, string | null>[]; hasNext: boolean }> {
+/** Every row of a report (search, column filters and paging happen in the browser table). Throws pg 42P01 while the tables are not deployed. */
+export async function reportRows(db: Db, key: string): Promise<Record<string, string | null>[]> {
   const tab = REPORTS[key];
-  // t::text = the whole row as text, so one search box covers every column; one extra row tells us whether a next page exists
-  const r = await db.query(
-    `SELECT * FROM (${tab.sql}) t WHERE ($1 = '' OR t::text ILIKE '%' || $1 || '%') ORDER BY ${tab.order} LIMIT $2 OFFSET $3`,
-    [q, PAGE_SIZE + 1, (page - 1) * PAGE_SIZE]);
-  return { rows: r.rows.slice(0, PAGE_SIZE), hasNext: r.rows.length > PAGE_SIZE };
+  return (await db.query(`SELECT * FROM (${tab.sql}) t ORDER BY ${tab.order}`)).rows;
 }

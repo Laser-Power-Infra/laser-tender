@@ -5,7 +5,7 @@ import picklists from '../seed/picklists.json';
 import { Db, loadColumns } from '../sync/lib.ts';
 import { schemaSql } from '../sync/env.ts';
 import { seed } from '../sync/seed.ts';
-import { PAGE_SIZE, REPORTS, runReport } from './reports.ts';
+import { REPORTS, reportRows } from './reports.ts';
 import { addItem,createEnquiry, formFields, getForEdit, listItems, picklistOptions, updateEnquiry, updateItem } from './enquiryWrite.ts';
 
 // One PGlite for the whole file, schema reset per test (see sync/sync.test.ts).
@@ -118,7 +118,7 @@ test('item lines: dashboard-owned "new" lines, duplicate rule names the existing
 // lib/reports.ts is tested here to share the one PGlite instance (a second instance in the same process crashes V8 on this machine).
 test('reports: the four queries run, search and paging work, deleted rows are hidden', async () => {
   const db = await freshDb();
-  for (const key of Object.keys(REPORTS)) assert.deepEqual(await runReport(db, key, '', 1), { rows: [], hasNext: false }, key);
+  for (const key of Object.keys(REPORTS)) assert.deepEqual(await reportRows(db, key), [], key);
   await db.query(`INSERT INTO enquiry (docket_no, party_name, utility, account_holder, quotation_no, quotation_date) VALUES
     ('ENQ-1-25-26', 'ACME LTD', 'WBSEDCL', 'AKASH', 'LP/Q/1', '2026-11-01'), ('ENQ-2-25-26', 'BETA', 'CESC', 'ANISH', 'LP/Q/2', '2026-11-20'), ('ENQ-3-25-26', 'GAMMA', NULL, NULL, ' ', NULL)`);
   await db.query(`INSERT INTO enquiry_item (docket_no, party_item_name, propose_erp_item, remarks_of_proposer, qty, unit, deleted_at) VALUES
@@ -127,22 +127,15 @@ test('reports: the four queries run, search and paging work, deleted rows are hi
   await db.query(`INSERT INTO rm_rate (rate_date, rm_name, rate, rate_unit, source_tab) VALUES
     ('2026-11-23', 'ALUMINIUM', 250, 'kg', 'DAILY RM RATES'), ('2026-11-24', 'ALUMINIUM', 255.5, 'kg', 'DAILY RM RATES'), ('2026-11-24', 'COPPER', 900, 'kg', 'DAILY RM RATES')`);
 
-  const items = await runReport(db, 'items', '', 1);
+  const items = { rows: await reportRows(db, 'items') };
   assert.deepEqual(items.rows.map(r => r['Party item name']), ['CABLE C', 'CABLE B', 'CABLE A']);
   assert.deepEqual([items.rows[2].Party, items.rows[2].Utility, items.rows[2]['Quotation no.'], Number(items.rows[2].Qty)], ['ACME LTD', 'WBSEDCL', 'LP/Q/1', 65]);
-  assert.deepEqual((await runReport(db, 'items', 'acme', 1)).rows.map(r => r['Party item name']), ['CABLE B', 'CABLE A']);
-  assert.deepEqual((await runReport(db, 'items', "x' OR '1'='1", 1)).rows, []);
-  assert.deepEqual((await runReport(db, 'no-erp-code', '', 1)).rows.map(r => r['Party item name']), ['CABLE C', 'CABLE B']);
-  assert.deepEqual((await runReport(db, 'quotations', '', 1)).rows.map(r => [r['Quotation no.'], r['Quotation date']]), [['LP/Q/2', '20-Nov-2026'], ['LP/Q/1', '01-Nov-2026']]);
-  assert.deepEqual((await runReport(db, 'rates', '', 1)).rows.map(r => [r['Raw material'], Number(r.Rate), r['Rate date']]), [['ALUMINIUM', 255.5, '24-Nov-2026'], ['COPPER', 900, '24-Nov-2026']]);
+  assert.deepEqual((await reportRows(db, 'no-erp-code')).map(r => r['Party item name']), ['CABLE C', 'CABLE B']);
+  assert.deepEqual((await reportRows(db, 'quotations')).map(r => [r['Quotation no.'], r['Quotation date']]), [['LP/Q/2', '20-Nov-2026'], ['LP/Q/1', '01-Nov-2026']]);
+  assert.deepEqual((await reportRows(db, 'rates')).map(r => [r['Raw material'], Number(r.Rate), r['Rate date']]), [['ALUMINIUM', 255.5, '24-Nov-2026'], ['COPPER', 900, '24-Nov-2026']]);
 
-  await db.query(`INSERT INTO enquiry_item (docket_no, party_item_name) SELECT 'ENQ-3-25-26', 'BULK ' || g FROM generate_series(1, ${PAGE_SIZE}) g`);
-  const p1 = await runReport(db, 'items', '', 1);
-  assert.deepEqual([p1.rows.length, p1.hasNext], [PAGE_SIZE, true]);
-  const p2 = await runReport(db, 'items', '', 2);
-  assert.deepEqual([p2.rows.length, p2.hasNext], [3, false]);
   await db.query('DROP TABLE rm_rate');
-  await assert.rejects(runReport(db, 'rates', '', 1), (e: any) => e.code === '42P01');
+  await assert.rejects(reportRows(db, 'rates'), (e: any) => e.code === '42P01');
 });
 
 test('picklistOptions: big lists, countries and small lists by key', async () => {
