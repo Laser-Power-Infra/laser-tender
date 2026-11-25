@@ -35,3 +35,7 @@ next-env.d.ts
 
 # cost scan runtime logs
 /logs
+
+/.claude/
+
+/tmp/

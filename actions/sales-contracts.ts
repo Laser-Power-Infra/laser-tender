@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth";
 import { syncSalesContracts } from "@/services/salesContractSyncService";
 
 interface SyncResult {
@@ -37,6 +38,7 @@ export async function getSalesContracts(): Promise<SalesContractActionResponse> 
 
 export async function syncSalesContractsAction(): Promise<SalesContractActionResponse> {
   try {
+    await requireUser();
     const result = await syncSalesContracts();
     return { success: true, result };
   } catch (err) {

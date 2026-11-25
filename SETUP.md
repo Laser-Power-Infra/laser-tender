@@ -24,7 +24,10 @@ The job runs four steps, in order:
 Every network-scan run (step 2) **and** the nightly breakdown (step 4) are recorded in
 the **`CostingScanRun`** table and shown on the dashboard (sidebar → "COSTING SCAN
 HISTORY"). Scan rows show searched/found/missing; "nightly" rows show
-`Net · Sheet · none · parsed`.
+`Net · AppSheet · none · parsed · queued` (network attachments / AppSheet-Drive URLs /
+no attachment / parsed costing / tasks published to the parsing queue).
+Step 3 (`pushCostingToQueue.mjs`) writes its summary to `logs\last-queue-push.json`,
+which step 4 reads for the `queued` count.
 
 ---
 
@@ -200,7 +203,8 @@ schtasks /Run /TN "LaserTender_CostingScan"
 
 - **Dashboard**: side panel → "COSTING SCAN HISTORY" lists the last 15 runs. Scan rows
   show status, found/matched, missing, failed, duration. "nightly" rows show
-  `Net · Sheet · none · parsed` (network / AppSheet-Drive / no-attachment / parsed).
+  `Net · AppSheet · none · parsed · queued` (network / AppSheet-Drive /
+  no-attachment / parsed / published to the parsing queue).
 - **Logs** (in `D:\laser-tenders\logs\`):
   - `costing-scan-console.log` — master timeline: STEP banners + each step's full
     output, accumulating every run.
@@ -210,6 +214,56 @@ schtasks /Run /TN "LaserTender_CostingScan"
   - `costing-job-report.log` — step 4 (latest run only).
 - **Console**: when the job runs in a visible window, each step prints
   `===== STEP n: ... START/DONE/FAILED =====` so you can watch progress live.
+
+---
+
+## Automatic daily Refresh + Allocate (triggered by ofelia)
+
+Separate from the nightly costing job above. Once a day, **ofelia** (the scheduler in the
+`infrastructure` repo) calls the app, and the app does what the dashboard's
+**Refresh Data** and **Allocate tender** buttons do. The buttons keep working as before.
+
+- **URL the app exposes:** `POST /api/scheduler/daily-refresh-allocate` with header
+  `x-api-key: <WORKER_API_KEY>` (same key as `/api/costing/refresh`). A `GET` with the
+  key only checks the key and returns `{"auth":"ok"}`. Body `{"allocate": false}` runs
+  the refresh only.
+- **Where the schedule lives:** `infrastructure/ofelia/config.ini`, job
+  `laser-tender-daily-refresh-allocate` (07:00 IST), which runs
+  `ofelia/scripts/api/laser-tender-daily-sync.sh`. Change the time there, not in this app.
+- **Settings:**
+  - app (`D:laser-tender.env.production`): `WORKER_API_KEY`
+  - ofelia (the infrastructure `.env`): `LASER_TENDER_SERVER=http://laser-tender:4173`
+    and `LASER_TENDER_API_KEY` = the same value as the app's `WORKER_API_KEY`.
+    After changing them: `docker compose up -d ofelia`.
+- Each run does the refresh first, then the allocation. If the refresh does not complete
+  (or saves nothing), allocation is skipped and the job reports `"success": false`, which
+  ofelia records as a failed run.
+- Auto-allocation follows the same rules as the button and is just as permanent: an
+  assigned tender cannot be reassigned from the dashboard.
+- **Run it once by hand:** `docker exec ofelia sh /scripts/api/laser-tender-daily-sync.sh`
+- **Check it ran:** `docker logs ofelia` (job result) and
+  `docker logs laser-tender | findstr DailyJobs` (`Refresh done`, `Allocation done`).
+- The old in-app timer settings `AUTO_DAILY_RUN_TIME_IST` / `AUTO_ALLOCATE_AFTER_REFRESH`
+  are no longer used and can be removed from `.env.production`.
+
+---
+
+## Login (NextAuth)
+
+Anyone can view the dashboards without signing in. Editing a tender or running an action
+(Refresh Data, Allocate tender, costing scan, queue push, Sales Contract sync) needs a
+signed-in user. Pages: `/signup`, `/signin`; **Sign out** is in the top bar.
+
+- **Settings in `.env.production`:**
+  - `NEXTAUTH_SECRET` — a long random value that signs the login cookie. Generate one with
+    `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`.
+    Changing it signs everyone out.
+  - `NEXTAUTH_URL` — the address users open the app at, e.g. `http://<server>:4173`.
+- **The first user to sign up becomes ADMIN**; everyone after that is USER. Create the
+  admin account right after deploying. Roles are stored but nothing is restricted by role yet.
+- The scheduled jobs (`/api/scheduler/*`, `/api/costing/*`) do not use login; they keep
+  using `WORKER_API_KEY`.
+- Needs the `User` table from the `20261124120000_enquiry_platform` migration.
 
 ---
 
@@ -242,3 +296,20 @@ schtasks /Run /TN "LaserTender_CostingScan"
   `costingScanAttemptedAt` is null or older than `COSTING_SCAN_RETRY_DAYS`. If you want
   to force a re-search of everything immediately, lower the retry days or clear the
   column: `node -e "...prisma.smartsheetTender.updateMany({data:{costingScanAttemptedAt:null}})"`.
+## Enquiry platform (own database for enquiries)
+
+New tables come from `prisma/migrations/20261124120000_enquiry_platform`. Until they are deployed and filled, the dashboard keeps reading `SmartsheetTender` as before. Deploy order:
+
+```
+npm run prisma:migrate                    # applies the migration
+npm run db:seed                           # parties, utilities, ERP items, dropdowns
+npm run sync:smartsheet -- --sheet all    # Sales Enquiry 3 + item lists ERP 9/10/11 (add --dry-run to test in memory)
+npm run db:seed                           # again: aligns the docket counter
+npm run sync:gsheets                      # Google tabs -> sheet_snapshot, rm_rate, non_chain_bom
+```
+
+- "Refresh Data" and the daily job then keep the enquiry tables up to date.
+- `npm run parity` compares Smartsheet with the database (exit code 1 = differences).
+- `npm run sync:mirror` WRITES dashboard-created rows to Smartsheet (formula columns are skipped). It has never been run against the live sheet: try it with `-- --dry-run` first. Formula results (Account Holder, Difference in Days, ...) do not come back into the dashboard for those rows yet.
+- `npm run sync:gsheets` also fills `freight_rate`, `drum_master` and `drums_per_truck` from the CLAUDE COSTINGS spreadsheet (shared with the service account on 24 Nov 2026).
+- Docs: `docs/enquiry-platform/`.

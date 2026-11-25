@@ -1,4 +1,5 @@
-import { prisma } from "../lib/prisma";
+import { prisma, pool } from "../lib/prisma";
+import { readEnquiryTenders } from "../lib/enquiryRead";
 import { findCostingFileRecursive, extractNumericDocket, encryptStoredPath, buildStoredPath } from "./costingFileFinder.mjs";
 
 const cleanFloat = (val) => {
@@ -213,32 +214,82 @@ export class DatabaseSmartsheetService {
       return { success: false, error: "Prisma client unavailable" };
     }
     try {
+      const assignee = typeof allocatedTo === "string" ? allocatedTo.trim() : "";
+      if (!assignee) {
+        return { success: false, error: "An assignee must be selected" };
+      }
+      const knownAssignees = await prisma.smartsheetTender.findMany({
+        where: { allocatedTo: { not: null } },
+        select: { allocatedTo: true },
+      });
+      // allocatedTo may hold several names ("PRITIKANA, TASHMITA")
+      if (!knownAssignees.some(row => row.allocatedTo?.split(",").some(name => name.trim() === assignee))) {
+        return { success: false, error: "Invalid assignee" };
+      }
+      const result = await prisma.smartsheetTender.updateMany({
+        where: {
+          docketNumber,
+          OR: [{ allocatedTo: null }, { allocatedTo: "" }],
+        },
+        data: { allocatedTo: assignee, lastSyncedAt: new Date() },
+      });
+      if (result.count > 0) {
+        return { success: true };
+      }
       const existing = await prisma.smartsheetTender.findUnique({
         where: { docketNumber },
+        select: { allocatedTo: true },
       });
       if (!existing) {
         return { success: false, error: "Record not found" };
       }
-      await prisma.smartsheetTender.update({
-        where: { docketNumber },
-        data: { allocatedTo, lastSyncedAt: new Date() },
-      });
-      return { success: true };
+      if (existing.allocatedTo?.trim() === assignee) return { success: true };
+      return { success: false, error: "Allocated To is already assigned and cannot be changed" };
     } catch (err) {
       return { success: false, error: err.message };
     }
   }
 
-  static async batchUpdateSmartsheetTenderAllocatedTo(docketNumbers, allocatedTo) {
+  static async batchUpdateSmartsheetTenderAllocatedTo(sourceDocketNumber, allocatedTo) {
     if (!prisma) {
       return { success: false, error: "Prisma client unavailable" };
     }
     try {
-      const result = await prisma.smartsheetTender.updateMany({
-        where: { docketNumber: { in: docketNumbers } },
-        data: { allocatedTo, lastSyncedAt: new Date() },
+      const assignee = typeof allocatedTo === "string" ? allocatedTo.trim() : "";
+      if (!assignee) {
+        return { success: false, error: "An assignee must be selected" };
+      }
+      const knownAssignees = await prisma.smartsheetTender.findMany({
+        where: { allocatedTo: { not: null } },
+        select: { allocatedTo: true },
       });
-      return { success: true, updatedCount: result.count };
+      // allocatedTo may hold several names ("PRITIKANA, TASHMITA")
+      if (!knownAssignees.some(row => row.allocatedTo?.split(",").some(name => name.trim() === assignee))) {
+        return { success: false, error: "Invalid assignee" };
+      }
+      const source = await prisma.smartsheetTender.findUnique({
+        where: { docketNumber: sourceDocketNumber },
+        select: { partyName: true, allocatedTo: true },
+      });
+      if (!source) return { success: false, error: "Source record not found" };
+      if (source.allocatedTo?.trim() !== assignee) {
+        return { success: false, error: "Source record is not assigned to this assignee" };
+      }
+      if (!source.partyName) return { success: true, updatedCount: 0, updatedDocketNumbers: [] };
+
+      const updatedRows = await prisma.smartsheetTender.updateManyAndReturn({
+        where: {
+          partyName: source.partyName,
+          docketNumber: { not: sourceDocketNumber },
+          OR: [{ allocatedTo: null }, { allocatedTo: "" }],
+        },
+        data: { allocatedTo: assignee, lastSyncedAt: new Date() },
+        select: { docketNumber: true },
+      });
+      const updatedDocketNumbers = updatedRows
+        .map(row => row.docketNumber)
+        .filter(docketNumber => typeof docketNumber === "string");
+      return { success: true, updatedCount: updatedDocketNumbers.length, updatedDocketNumbers };
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -556,6 +607,14 @@ export class DatabaseSmartsheetService {
     if (!prisma) {
       console.warn("[DatabaseSmartsheetService] Prisma client unavailable; returning empty list.");
       return [];
+    }
+
+    // enquiry JOIN SmartsheetTender once the enquiry tables are deployed and filled; otherwise the legacy read below.
+    try {
+      const rows = await readEnquiryTenders(pool);
+      if (rows && rows.length > 0) return rows;
+    } catch (err) {
+      console.error("[DatabaseSmartsheetService] Enquiry read failed; using SmartsheetTender only:", err);
     }
 
     try {

@@ -1,6 +1,8 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { SmartsheetTender } from "@/types/smartsheetTender";
+import { getEnquiryDetail } from "@/actions/enquiries";
+import type { EnquiryDetail } from "@/lib/enquiryRead";
 
 function formatDate(raw: string | null): string | null {
   if (!raw) return null;
@@ -21,6 +23,7 @@ interface Props {
   effectiveEmailSubjectLine: string | null;
   effectiveReverseAuction: string | null;
   effectiveLostStillScope: string;
+  allocatedToOptions: string[];
   // draft handlers
   savingAllocated: boolean;
   savingStatus: boolean;
@@ -34,7 +37,7 @@ interface Props {
   onSaveContactNo: (val: string) => void;
   onSaveEmailId: (val: string) => void;
   onSaveEmailSubjectLine: (val: string) => void;
-  onSaveReverseAuction: (val: string) => void;
+  onSaveReverseAuction: (val: string | null) => void;
   onSaveLostStillScope: (val: string | null) => void;
 }
 
@@ -49,6 +52,7 @@ export default function TenderDetailSheet({
   effectiveEmailSubjectLine,
   effectiveReverseAuction,
   effectiveLostStillScope,
+  allocatedToOptions,
   savingAllocated,
   savingStatus,
   savingContact,
@@ -64,7 +68,6 @@ export default function TenderDetailSheet({
   onSaveReverseAuction,
   onSaveLostStillScope,
 }: Props) {
-  const [draftAllocated, setDraftAllocated] = useState("");
   const [draftStatus, setDraftStatus] = useState("");
   const [draftContact, setDraftContact] = useState("");
   const [draftEmailId, setDraftEmailId] = useState("");
@@ -72,13 +75,12 @@ export default function TenderDetailSheet({
 
   useEffect(() => {
     if (tender) {
-      setDraftAllocated(effectiveAllocatedTo ?? "");
       setDraftStatus(effectiveStatus ?? "");
       setDraftContact(effectiveContactNo ?? "");
       setDraftEmailId(effectiveEmailId ?? "");
       setDraftEmailSubject(effectiveEmailSubjectLine ?? "");
     }
-  }, [tender, effectiveAllocatedTo, effectiveStatus, effectiveContactNo, effectiveEmailId, effectiveEmailSubjectLine]);
+  }, [tender, effectiveStatus, effectiveContactNo, effectiveEmailId, effectiveEmailSubjectLine]);
 
   useEffect(() => {
     if (!open) return;
@@ -87,6 +89,17 @@ export default function TenderDetailSheet({
     document.body.style.overflow = "hidden";
     return () => { document.removeEventListener("keydown", onEsc); document.body.style.overflow = ""; };
   }, [open, onClose]);
+
+  // Full Smartsheet row + items, loaded when the panel opens (empty until the enquiry tables are deployed)
+  const [detail, setDetail] = useState<EnquiryDetail | null>(null);
+  const docket = tender?.docketNumber ?? null;
+  useEffect(() => {
+    setDetail(null);
+    if (!open || !docket) return;
+    let stale = false;
+    getEnquiryDetail(docket).then(d => { if (!stale) setDetail(d); }).catch(() => {});
+    return () => { stale = true; };
+  }, [open, docket]);
 
   if (!tender) return null;
 
@@ -146,17 +159,20 @@ export default function TenderDetailSheet({
 
             <label className="tender-detail-field">
               <span className="tender-detail-label">Allocated To {savingAllocated && <span style={{ fontWeight: 400, fontSize: 11, color: "#999" }}>Saving...</span>}</span>
-              <input
+              <select
                 className="tender-detail-input"
-                value={draftAllocated}
-                onChange={e => setDraftAllocated(e.target.value)}
-                onBlur={() => onSaveAllocatedTo(draftAllocated)}
-                onKeyDown={e => {
-                  if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
-                  if (e.key === "Escape") { setDraftAllocated(effectiveAllocatedTo ?? ""); (e.target as HTMLInputElement).blur(); }
-                }}
-                placeholder="—"
-              />
+                value={effectiveAllocatedTo ?? ""}
+                disabled={!!effectiveAllocatedTo || savingAllocated}
+                onChange={e => onSaveAllocatedTo(e.target.value)}
+                aria-label={`Allocate ${tender.docketNumber || "tender"}`}
+                title={effectiveAllocatedTo ? "Assignment is permanent" : "Select an assignee"}
+              >
+                <option value="">Select assignee</option>
+                {effectiveAllocatedTo && !allocatedToOptions.includes(effectiveAllocatedTo) && (
+                  <option value={effectiveAllocatedTo}>{effectiveAllocatedTo}</option>
+                )}
+                {allocatedToOptions.map(name => <option key={name} value={name}>{name}</option>)}
+              </select>
             </label>
 
             <label className="tender-detail-field">
@@ -225,12 +241,12 @@ export default function TenderDetailSheet({
                 <button
                   className={`ra-toggle-btn ${effectiveReverseAuction === "yes" ? "ra-yes" : "ra-inactive"}`}
                   disabled={savingReverseAuction}
-                  onClick={() => onSaveReverseAuction("yes")}
+                  onClick={() => onSaveReverseAuction(effectiveReverseAuction === "yes" ? null : "yes")}
                 >Yes</button>
                 <button
                   className={`ra-toggle-btn ${effectiveReverseAuction === "no" ? "ra-no" : "ra-inactive"}`}
                   disabled={savingReverseAuction}
-                  onClick={() => onSaveReverseAuction("no")}
+                  onClick={() => onSaveReverseAuction(effectiveReverseAuction === "no" ? null : "no")}
                 >No</button>
               </div>
             </div>
@@ -247,12 +263,12 @@ export default function TenderDetailSheet({
                   <button
                     className={`ra-toggle-btn ${effectiveLostStillScope === "Lost" ? "ra-no" : "ra-inactive"}`}
                     disabled={savingLostStillScope}
-                    onClick={() => onSaveLostStillScope("Lost")}
+                    onClick={() => onSaveLostStillScope(effectiveLostStillScope === "Lost" ? null : "Lost")}
                   >Lost</button>
                   <button
                     className={`ra-toggle-btn ${effectiveLostStillScope === "Still Scope" ? "ra-yes" : "ra-inactive"}`}
                     disabled={savingLostStillScope}
-                    onClick={() => onSaveLostStillScope("Still Scope")}
+                    onClick={() => onSaveLostStillScope(effectiveLostStillScope === "Still Scope" ? null : "Still Scope")}
                   >Still Scope</button>
                 </div>
               )}
@@ -266,14 +282,14 @@ export default function TenderDetailSheet({
               <div className="tender-detail-item"><span className="tender-detail-k">Enquiry Date</span><span className="tender-detail-v">{tender.enquiryDate ? formatDate(tender.enquiryDate) : <NullCell />}</span></div>
               <div className="tender-detail-item"><span className="tender-detail-k">Docket Number</span><span className="tender-detail-v" style={{ fontFamily: "monospace", fontWeight: 600 }}>{tender.docketNumber ?? <NullCell />}</span></div>
               <div className="tender-detail-item"><span className="tender-detail-k">Party Name</span><span className="tender-detail-v">{tender.partyName ?? <NullCell />}</span></div>
-              <div className="tender-detail-item"><span className="tender-detail-k">Utility</span><span className="tender-detail-v">{tender.utility ?? <NullCell />}</span></div>
+              <div className="tender-detail-item"><span className="tender-detail-k">Location / Utility</span><span className="tender-detail-v">{tender.utility ?? <NullCell />}</span></div>
               <div className="tender-detail-item"><span className="tender-detail-k">Quotation Number</span><span className="tender-detail-v" style={{ fontFamily: "monospace" }}>{tender.quotationNumber ?? <NullCell />}</span></div>
               <div className="tender-detail-item"><span className="tender-detail-k">Contract Number</span><span className="tender-detail-v" style={{ fontFamily: "monospace", fontWeight: 600 }}>{tender.contractNo ?? <NullCell />}</span></div>
               <div className="tender-detail-item"><span className="tender-detail-k">Quotation Date</span><span className="tender-detail-v">{tender.quotationDate ?? <NullCell />}</span></div>
               <div className="tender-detail-item"><span className="tender-detail-k">Account Holder</span><span className="tender-detail-v">{tender.accountHolder ?? <NullCell />}</span></div>
               <div className="tender-detail-item"><span className="tender-detail-k">Email Id</span><span className="tender-detail-v" style={{ wordBreak: "break-all" }}>{tender.emailId ?? <NullCell />}</span></div>
               <div className="tender-detail-item"><span className="tender-detail-k">Email Subject Line</span><span className="tender-detail-v" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{tender.emailSubjectLine ?? <NullCell />}</span></div>
-              <div className="tender-detail-item"><span className="tender-detail-k">Tender / Purchase</span><span className="tender-detail-v">{tender.tenderPurchase ? <span className={`purchase-type-badge ${purchaseBadgeClass(tender.tenderPurchase)}`}>{tender.tenderPurchase}</span> : <NullCell />}</span></div>
+              <div className="tender-detail-item"><span className="tender-detail-k">Tender / Purchase / Budgetary / Laser Tender</span><span className="tender-detail-v">{tender.tenderPurchase ? <span className={`purchase-type-badge ${purchaseBadgeClass(tender.tenderPurchase)}`}>{tender.tenderPurchase}</span> : <NullCell />}</span></div>
               <div className="tender-detail-item"><span className="tender-detail-k">CVA Value</span><span className="tender-detail-v">{tender.cvaValue ?? <NullCell />}</span></div>
               <div className="tender-detail-item"><span className="tender-detail-k">Item Name</span><span className="tender-detail-v" style={{ whiteSpace: "pre-wrap" }}>{tender.proposedErpItemName ?? <NullCell />}</span></div>
               <div className="tender-detail-item"><span className="tender-detail-k">Tender Qty</span><span className="tender-detail-v" style={{ whiteSpace: "pre-wrap" }}>{tender.proposedQty ?? <NullCell />}</span></div>
@@ -293,6 +309,40 @@ export default function TenderDetailSheet({
               </div>
             )}
           </div>
+
+          {detail && detail.enquiry.length > 0 && docket && (
+            <div className="tender-detail-section" style={{ display: "flex", gap: 16 }}>
+              <a href={`/costing/${encodeURIComponent(docket)}`} style={{ color: "#1a73e8", textDecoration: "underline", fontWeight: 600 }}>Draft costing</a>
+              <a href={`/enquiries/${encodeURIComponent(docket)}/edit`} style={{ color: "#1a73e8", textDecoration: "underline", fontWeight: 600 }}>Edit enquiry / items</a>
+            </div>
+          )}
+
+          {detail && detail.enquiry.length > 0 && (
+            <details className="tender-detail-section">
+              <summary className="tender-detail-section-title" style={{ cursor: "pointer" }}>Full enquiry details ({detail.enquiry.length})</summary>
+              <div className="tender-detail-grid">
+                {detail.enquiry.map(f => (
+                  <div key={f.label} className="tender-detail-item"><span className="tender-detail-k">{f.label}</span><span className="tender-detail-v" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{f.value}</span></div>
+                ))}
+              </div>
+            </details>
+          )}
+
+          {detail && detail.items.length > 0 && (
+            <details className="tender-detail-section">
+              <summary className="tender-detail-section-title" style={{ cursor: "pointer" }}>Items ({detail.items.length})</summary>
+              {detail.items.map((item, i) => (
+                <div key={i} style={{ marginTop: 10 }}>
+                  <div className="tender-detail-k" style={{ marginBottom: 4 }}>Item {i + 1}</div>
+                  <div className="tender-detail-grid">
+                    {item.map(f => (
+                      <div key={f.label} className="tender-detail-item"><span className="tender-detail-k">{f.label}</span><span className="tender-detail-v" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{f.value}</span></div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </details>
+          )}
         </div>
 
         <div className="tender-detail-footer">

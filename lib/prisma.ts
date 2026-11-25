@@ -4,7 +4,8 @@ import pg from "pg";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-const pool = new pg.Pool({
+// Exported for raw SQL on the enquiry-platform tables (satisfies sync/lib.ts Db).
+export const pool = new pg.Pool({
   connectionString:
     process.env.ENVIRONMENT === "PROD"
       ? process.env.DATABASE_URL
@@ -12,8 +13,6 @@ const pool = new pg.Pool({
   max: 5,
   connectionTimeoutMillis: 15000,
 });
-console.log("db url:", process.env.DATABASE_URL);
-console.log("db url dev:", process.env.DATABASE_URL_DEV);
 
 const adapter = new PrismaPg(pool);
 

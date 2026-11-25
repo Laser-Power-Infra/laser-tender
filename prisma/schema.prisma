@@ -65,6 +65,10 @@ model CostingScanRun {
   appsheetCount Int       @default(0)
   noAttachment  Int       @default(0)
   parsedCount   Int       @default(0)
+  queuePublished   Int    @default(0)
+  queueFailed      Int    @default(0)
+  queueSkippedNoUrl Int   @default(0)
+  queueSkippedParsed Int  @default(0)
 
   @@index([startedAt])
 }
@@ -103,4 +107,440 @@ model SalesContract {
   closedFlag              String?
 
   @@unique([quotationNumber, itemCode])
+}
+
+
+// ---------------------------------------------------------------------------
+// Enquiry platform (migration 20261124120000_enquiry_platform).
+// Views, functions, sequences, partial unique indexes and CHECK constraints
+// exist only in the migration SQL. Enquiry / EnquiryItem columns mirror
+// db/columns.json (Smartsheet title <-> column mapping).
+// ---------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  USER
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  role         Role     @default(USER)
+  createdAt    DateTime @default(now())
+}
+
+model Enquiry {
+  column1                              String?
+  docket_no                            String   @id
+  enquiry_status                       String?
+  created_by                           String?
+  entry_datetime                       DateTime? @db.Timestamptz(6)
+  enquiry_date                         DateTime? @db.Date
+  difference_in_days                   Int?
+  party_name                           String?
+  enquiry_from_email                   String?
+  email_subject                        String?
+  reference_no                         String?
+  account_holder                       String?
+  enquiries_since_2018                 String?
+  orders_since_2018                    String?
+  matching_docket_no                   String?
+  party_business_activity_type         String?
+  enquiry_type                         String?
+  enquiry_category                     String?
+  accept_regret_transfer               String?
+  reason_regret_transfer               String?
+  due_date                             DateTime? @db.Date
+  project_name                         String?
+  utility                              String?
+  enquiry_tender_no                    String?
+  att_specifications                   String?
+  att_gtp_format                       String?
+  att_title_block                      String?
+  gtp_requirement                      String?
+  csd_requirement                      String?
+  dd_requirement                       String?
+  sample_required                      String?
+  type_test_requirement                String?
+  interest_pct                         Decimal? @db.Decimal
+  inspection_commission                String?
+  erp_inquiry_voucher_no               String?
+  erp_inquiry_voucher_date             DateTime? @db.Date
+  qtn_submitted_for_verification       String?
+  qtn_verified_by_d_roy                String?
+  order_expectation                    String?
+  last_updated_comment                 String?
+  final_csd_attachment                 String?
+  csd_attachment_process               String?
+  final_dd_attachment                  String?
+  dd_attachment_process                String?
+  final_bom_attachment                 String?
+  bom_attachment_process               String?
+  quotation_no                         String?
+  quotation_date                       DateTime? @db.Date
+  modified_by                          String?
+  acc_holder_contact_list              String?
+  modified_at                          DateTime? @db.Timestamptz(6)
+  duplicate_no                         String?
+  marketing_team_job_count             String?
+  total_jobs                           String?
+  tender_docket_no_mkt                 String?
+  corrigendum_issued_date              DateTime? @db.Date
+  corrigendum_attached                 String?
+  corrigendum_reviewed_by_acc_holder   String?
+  enquiry_contact_person               String?
+  terms_conditions                     String?
+  terms_conditions_1                   String?
+  enquiry_contact_no                   String?
+  forwarded_to_uic                     Boolean?
+  allocated_to                         String?
+  lost_still_scope                     String?
+  contract_no                          String?
+  reverse_auction                      Boolean?
+  cva_value                            Decimal? @db.Decimal
+  price_basis                          String?
+  status_note                          String?
+  rm_rate_al                           Decimal? @db.Decimal
+  rm_rate_cu                           Decimal? @db.Decimal
+  master                               String   @default("smartsheet")
+  mirrored_at                          DateTime? @db.Timestamptz(6)
+  smartsheet_row_id                    BigInt?
+  source_sheet_id                      BigInt?
+  legacy                               Json     @default("{}")
+  row_version                          Int      @default(1)
+  created_at                           DateTime @default(now()) @db.Timestamptz(6)
+  updated_at                           DateTime @default(now()) @db.Timestamptz(6)
+  updated_by                           String?
+  deleted_at                           DateTime? @db.Timestamptz(6)
+
+  @@index([enquiry_date(sort: Desc)], map: "enquiry_enquiry_date_idx")
+  @@index([party_name], map: "enquiry_party_idx")
+  @@index([account_holder], map: "enquiry_account_holder_idx")
+  @@index([allocated_to], map: "enquiry_allocated_idx")
+  @@index([quotation_no], map: "enquiry_quotation_no_idx")
+  @@index([updated_at], map: "enquiry_updated_idx")
+  @@map("enquiry")
+}
+
+model EnquiryItem {
+  id                                   BigInt   @id @default(autoincrement())
+  primary_column                       String?
+  docket_no                            String 
+  party_item_name                      String?
+  utility                              String?
+  state                                String?
+  country                              String?
+  instruction_of_account_holder        String?
+  remark_by_account_holder             String?
+  ah_update_ts_attached                String?
+  ah_update_gtp_attached               String?
+  propose_old_quotation_no             String?
+  conductor                            String?
+  armouring                            String?
+  voltage_grade                        String?
+  item_schedule                        String?
+  std_length                           String?
+  party_length                         String?
+  spec_master_available                String?
+  propose_erp_item                     String?
+  remarks_of_proposer                  String?
+  all_technical_job_completed          String?
+  comment_of_md_no_erp_code            String?
+  duplicate_item                       String?
+  duplicate_item_2                     String?
+  enquiry_status                       String?
+  special_rate_requirement             String?
+  special_value_addition_pct           Decimal? @db.Decimal
+  special_rate_approval_dvg            String?
+  qty                                  Decimal? @db.Decimal
+  unit                                 String?
+  freight                              Decimal? @db.Decimal
+  truck_type                           String?
+  gst_pct                              Decimal? @db.Decimal
+  firm_pct                             Decimal? @db.Decimal
+  mfg_pct                              Decimal? @db.Decimal
+  prof_pct                             Decimal? @db.Decimal
+  intt_pct                             Decimal? @db.Decimal
+  insp_pct                             Decimal? @db.Decimal
+  ttr_charges_pct                      Decimal? @db.Decimal
+  remarks_extra_consumption            String?
+  freight_reviewed_by_logistic         String?
+  destination_pin_code                 String?
+  actual_lg_pct                        Decimal? @db.Decimal
+  actual_non_chain_bom_id              String?
+  quotation_no                         String?
+  akshat_approval_bom_lg               Boolean?
+  base_date                            DateTime? @db.Date
+  created_by                           String?
+  created_at_src                       DateTime? @db.Timestamptz(6)
+  master                               String   @default("smartsheet")
+  mirrored_at                          DateTime? @db.Timestamptz(6)
+  item_list                            String   @default("ERP 11")
+  smartsheet_row_id                    BigInt?
+  source_sheet_id                      BigInt?
+  legacy                               Json     @default("{}")
+  row_version                          Int      @default(1)
+  created_at                           DateTime @default(now()) @db.Timestamptz(6)
+  updated_at                           DateTime @default(now()) @db.Timestamptz(6)
+  updated_by                           String?
+  deleted_at                           DateTime? @db.Timestamptz(6)
+  item_costings                        ItemCosting[]
+  attachments                          Attachment[]
+
+  @@index([docket_no], map: "enquiry_item_docket_idx")
+  @@index([propose_erp_item], map: "enquiry_item_erp_idx")
+  @@index([utility], map: "enquiry_item_utility_idx")
+  @@index([updated_at], map: "enquiry_item_updated_idx")
+  @@map("enquiry_item")
+}
+
+model RefParty {
+  name   String  @id
+  active Boolean @default(true)
+
+  @@map("ref_party")
+}
+
+model RefUtility {
+  name   String  @id
+  active Boolean @default(true)
+
+  @@map("ref_utility")
+}
+
+model RefErpItem {
+  code   String  @id
+  name   String
+  label  String  @unique
+  active Boolean @default(true)
+
+  @@map("ref_erp_item")
+}
+
+model RefPicklist {
+  list_key   String
+  sort_order Int
+  value      String
+
+  @@id([list_key, sort_order])
+  @@map("ref_picklist")
+}
+
+model SheetSnapshot {
+  sheet_key String
+  tab_name  String
+  row_no    Int
+  data      Json
+  synced_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@id([sheet_key, tab_name, row_no])
+  @@index([data], map: "sheet_snapshot_gin", type: Gin)
+  @@map("sheet_snapshot")
+}
+
+model RmRate {
+  rate_date  DateTime @db.Date
+  rm_name    String
+  rate       Decimal  @db.Decimal
+  rate_unit  String?
+  source_tab String
+
+  @@id([rate_date, rm_name, source_tab])
+  @@map("rm_rate")
+}
+
+model FreightRate {
+  id            BigInt   @id @default(autoincrement())
+  from_location String?
+  to_location   String?
+  to_pin        String?
+  vehicle_type  String?
+  rate_per_trip Decimal  @db.Decimal
+  rate_date     DateTime @db.Date
+  abnormal      Boolean  @default(false)
+  source_ref    String?
+
+  @@index([to_pin, vehicle_type], map: "freight_rate_pin_idx")
+  @@map("freight_rate")
+}
+
+model DrumMaster {
+  drum_code       String   @id
+  description     String?
+  flange_dia_inch Decimal? @db.Decimal
+  length_m        Decimal? @db.Decimal
+  cost_col_n      Decimal? @db.Decimal
+  cost_col_d      Decimal? @db.Decimal
+  drum_bom_id     String?
+  source_ref      String?
+
+  @@map("drum_master")
+}
+
+model DrumsPerTruck {
+  drum_code    String
+  vehicle_type String
+  max_drums    Int
+
+  @@id([drum_code, vehicle_type])
+  @@map("drums_per_truck")
+}
+
+model NonChainBom {
+  bom_id      String
+  erp_code    String?
+  rm_name     String
+  consumption Decimal @db.Decimal
+  unit        String?
+
+  @@id([bom_id, rm_name])
+  @@index([erp_code], map: "non_chain_bom_erp_idx")
+  @@map("non_chain_bom")
+}
+
+enum CostingStatus {
+  DRAFT
+  UNDER_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  SUPERSEDED
+
+  @@map("costing_status")
+}
+
+model CostingRun {
+  id              BigInt          @id @default(autoincrement())
+  docket_no       String
+  revision        Int             @default(1)
+  status          CostingStatus   @default(DRAFT)
+  rm_rate_policy  String          @default("FIRM")
+  rm_base_date    DateTime?       @db.Date
+  excel_file_id   String?
+  excel_file_name String?
+  touhid_remarks  String?
+  created_by      String?
+  created_at      DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime        @default(now()) @db.Timestamptz(6)
+  items           ItemCosting[]
+  reviews         CostingReview[]
+
+  @@unique([docket_no, revision])
+  @@map("costing_run")
+}
+
+model ItemCosting {
+  id             BigInt       @id @default(autoincrement())
+  run_id         BigInt
+  item_id        BigInt?
+  it_code        String?
+  erp_item       String?
+  qty            Decimal?     @db.Decimal
+  unit           String?
+  bom_id         String?
+  bom_match_note String?
+  rm_cost        Decimal?     @db.Decimal
+  drum_cost      Decimal?     @db.Decimal
+  freight        Decimal?     @db.Decimal
+  ex_works       Decimal?     @db.Decimal
+  price_ex_gst   Decimal?     @db.Decimal
+  gst            Decimal?     @db.Decimal
+  price_incl_gst Decimal?     @db.Decimal
+  inputs         Json         @default("{}")
+  breakdown      Json         @default("{}")
+  run            CostingRun   @relation(fields: [run_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  item           EnquiryItem? @relation(fields: [item_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rm_details     RmDetail[]
+
+  @@map("item_costing")
+}
+
+model RmDetail {
+  id                 BigInt      @id @default(autoincrement())
+  item_costing_id    BigInt
+  rm_name            String
+  consumption        Decimal     @db.Decimal
+  unit               String?
+  rate               Decimal?    @db.Decimal
+  rate_date          DateTime?   @db.Date
+  amount             Decimal?    @db.Decimal
+  consumption_source String
+  source_ref         String?
+  formula            String?
+  item_costing       ItemCosting @relation(fields: [item_costing_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("rm_detail")
+}
+
+model CostingReview {
+  id         BigInt     @id @default(autoincrement())
+  run_id     BigInt
+  author     String
+  comment    String
+  created_at DateTime   @default(now()) @db.Timestamptz(6)
+  run        CostingRun @relation(fields: [run_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("costing_review")
+}
+
+model Attachment {
+  id                       BigInt       @id @default(autoincrement())
+  docket_no                String
+  item_id                  BigInt?
+  kind                     String?
+  filename                 String
+  storage_path             String
+  sha256                   String?
+  bytes                    BigInt?
+  source                   String       @default("upload")
+  smartsheet_attachment_id BigInt?
+  uploaded_by              String?
+  uploaded_at              DateTime     @default(now()) @db.Timestamptz(6)
+  item                     EnquiryItem? @relation(fields: [item_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([docket_no], map: "attachment_docket_idx")
+  @@map("attachment")
+}
+
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  at         DateTime @default(now()) @db.Timestamptz(6)
+  actor      String?
+  action     String
+  table_name String
+  pk         String
+  changes    Json
+
+  @@index([table_name, pk, at(sort: Desc)], map: "audit_log_pk_idx")
+  @@map("audit_log")
+}
+
+model SyncState {
+  job                  String    @id
+  last_success_at      DateTime? @db.Timestamptz(6)
+  last_modified_cursor DateTime? @db.Timestamptz(6)
+  detail               Json?
+
+  @@map("sync_state")
+}
+
+model SyncLog {
+  id           BigInt    @id @default(autoincrement())
+  job          String
+  started_at   DateTime  @default(now()) @db.Timestamptz(6)
+  finished_at  DateTime? @db.Timestamptz(6)
+  ok           Boolean?
+  rows_read    Int?
+  rows_written Int?
+  message      String?
+
+  @@map("sync_log")
+}
+
+model AppSetting {
+  key   String @id
+  value String
+
+  @@map("app_setting")
 }
