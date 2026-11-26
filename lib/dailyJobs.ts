@@ -1,4 +1,6 @@
 import { syncSmartsheetToDb } from "@/lib/smartsheet-sync";
+import { pool } from "@/lib/prisma";
+import { runGsheetsSync } from "@/sync/gsheets_sync";
 import {
   applyTenderAllocationPlan,
   createTenderAllocationPlan,
@@ -26,6 +28,7 @@ export interface DailyJobsResult {
     updated?: number;
     matched?: number;
   } & Partial<Record<TenderAllocationAssignee, number>>;
+  sheets?: { status: "ok" | "partial" | "failed"; tabs?: number; failed?: string[]; reason?: string };
   durationMs: number;
 }
 
@@ -126,6 +129,23 @@ export async function runDailyRefreshAndAllocate(
         result.allocate = { status: "failed", reason: message };
         console.error("[DailyJobs] Allocation failed:", message);
       }
+    }
+
+    // Google Sheets (rates, BOM, ERP dumps, GTP...) last: it takes minutes and must not hold up or fail the allocation.
+    // Its outcome is reported in `sheets` and in the sync_log table, not in `success`.
+    try {
+      const client = await pool.connect();   // one connection: the sync uses BEGIN/COMMIT
+      try {
+        const s = await runGsheetsSync(client);
+        result.sheets = { status: s.failed.length ? "partial" : "ok", tabs: s.tabs, failed: s.failed };
+        console[s.failed.length ? "warn" : "log"](`[DailyJobs] Google Sheets: ${s.tabs} tabs synced${s.failed.length ? `, FAILED: ${s.failed.join(", ")}` : ""}`);
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      result.sheets = { status: "failed", reason: message };
+      console.error("[DailyJobs] Google Sheets sync failed:", message);
     }
 
     result.success = refreshed && !allocationFailed;

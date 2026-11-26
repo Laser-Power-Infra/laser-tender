@@ -52,10 +52,11 @@ export async function googleToken(): Promise<string> {
   return getAccessToken(email, key.replace(/\\n/g, '\n'));
 }
 
-async function main() {
-  const want = process.argv.includes('--sheet') ? process.argv[process.argv.indexOf('--sheet') + 1] : 'all';
-  const { db, close } = await cliPool();
+/** Re-read every configured tab into sheet_snapshot, then rebuild the typed tables. `db` must be one connection. Returns what failed; a failed tab keeps its old rows. */
+export async function runGsheetsSync(db: Db, want = 'all'): Promise<{ tabs: number; failed: string[] }> {
   const token = await googleToken();
+  let tabs = 0;
+  const failed: string[] = [];
   for (const s of loadConfig().googleSheets.filter((x: any) => want === 'all' || x.key === want)) {
     for (const tab of s.tabs) {
       const started = new Date();
@@ -64,15 +65,24 @@ async function main() {
         const n = await replaceTab(db, s.key, tab.name, rowsToSnapshot(await fetchTab(token, s.spreadsheetId, tab.name), tab.headerRow ?? 1));
         await db.query('INSERT INTO sync_log(job,started_at,finished_at,ok,rows_read,rows_written) VALUES ($1,$2,now(),true,$3,$3)', [job, started, n]);
         console.log(`[${s.key}/${tab.name}] ${n} rows`);
+        tabs++;
       } catch (e: any) {
+        failed.push(`${s.key}/${tab.name}`);
         await db.query('INSERT INTO sync_log(job,started_at,finished_at,ok,message) VALUES ($1,$2,now(),false,$3)', [job, started, String(e.message).slice(0, 500)]);
         console.error(`[${s.key}/${tab.name}] FAILED: ${e.message}`);
       }
     }
   }
-  try { console.log('[typed tables]', await loadTypedTables(db)); }      // db is a single connection (see cliPool)
-  catch (e: any) { console.error(`[typed tables] FAILED: ${e.message}`); process.exitCode = 1; }
-  await close();
+  try { console.log('[typed tables]', await loadTypedTables(db)); }
+  catch (e: any) { failed.push('typed tables'); console.error(`[typed tables] FAILED: ${e.message}`); }
+  return { tabs, failed };
+}
+
+async function main() {
+  const want = process.argv.includes('--sheet') ? process.argv[process.argv.indexOf('--sheet') + 1] : 'all';
+  const { db, close } = await cliPool();      // a single connection
+  try { if ((await runGsheetsSync(db, want)).failed.length) process.exitCode = 1; }
+  finally { await close(); }
 }
 
 if (isMain(import.meta.url)) main().catch(e => { console.error(e); process.exit(1); });

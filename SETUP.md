@@ -238,6 +238,11 @@ Separate from the nightly costing job above. Once a day, **ofelia** (the schedul
 - Each run does the refresh first, then the allocation. If the refresh does not complete
   (or saves nothing), allocation is skipped and the job reports `"success": false`, which
   ofelia records as a failed run.
+- After the allocation the same run re-reads every Google Sheet in `sync/sheets.config.json`
+  (rates, BOM, ERP dumps, pre-approved GTP...). This adds a few minutes, so the timeout in the
+  ofelia script must allow for it. A sheet that fails keeps yesterday's data and does **not**
+  make the job fail: look at `"sheets"` in the response, `findstr "Google Sheets"` in the app
+  log, or the `sync_log` table. The **Refresh Data** button does not run this part.
 - Auto-allocation follows the same rules as the button and is just as permanent: an
   assigned tender cannot be reassigned from the dashboard.
 - **Run it once by hand:** `docker exec ofelia sh /scripts/api/laser-tender-daily-sync.sh`
