@@ -5,6 +5,8 @@ import { FilterTable } from "@/components/FilterTable";
 
 export const dynamic = "force-dynamic";
 
+const isLink = (v: string) => /^https:\/\/\S+$/.test(v);
+
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const sp = await searchParams;
   const tabKey = typeof sp.tab === "string" && Object.hasOwn(REPORTS, sp.tab) ? sp.tab : "items";
@@ -45,7 +47,12 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
             </div>
           ) : (
             // key: a fresh table (filters cleared) when the report tab changes
-            <FilterTable key={tabKey} title={tab.label} cols={tab.cols.map(label => ({ label }))} rows={rows.map(r => ({ text: tab.cols.map(c => r[c] ?? "") }))} />
+            <FilterTable key={tabKey} title={tab.label} badge={tab.note} cols={tab.cols.map(label => ({ label }))} rows={rows.map(r => {
+              const text = tab.cols.map(c => r[c] ?? "");
+              // a cell that is only a web link (e.g. the GTP attachment) opens in a new tab
+              const cells = text.some(isLink) ? text.map((v, i) => isLink(v) ? <a key={i}href={v} target="_blank" rel="noopener noreferrer" className="underline">Open</a> : (v || <span className="smartsheet-null-cell">-</span>)) : undefined;
+              return { text, cells };
+            })} />
           )}
         </main>
       </div>

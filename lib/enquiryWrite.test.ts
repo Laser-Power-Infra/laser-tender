@@ -134,6 +134,12 @@ test('reports: the four queries run, search and paging work, deleted rows are hi
   assert.deepEqual((await reportRows(db, 'quotations')).map(r => [r['Quotation no.'], r['Quotation date']]), [['LP/Q/2', '20-Nov-2026'], ['LP/Q/1', '01-Nov-2026']]);
   assert.deepEqual((await reportRows(db, 'rates')).map(r => [r['Raw material'], Number(r.Rate), r['Rate date']]), [['ALUMINIUM', 255.5, '24-Nov-2026'], ['COPPER', 900, '24-Nov-2026']]);
 
+  // ERP dump tabs: newest first, a date that is not DD-mon-YYYY sorts last instead of failing
+  await db.query(`INSERT INTO sheet_snapshot (sheet_key, tab_name, row_no, data) VALUES
+    ('TENDER_DUMP', 'CONT DUMP', 2, '{"CONTRACT_NO":"OLD","CONTRACT_DATE":"24-may-2018"}'), ('TENDER_DUMP', 'CONT DUMP', 3, '{"CONTRACT_NO":"BAD","CONTRACT_DATE":"n/a"}'),
+    ('TENDER_DUMP', 'CONT DUMP', 4, '{"CONTRACT_NO":"NEW","CONTRACT_DATE":"02-May-2025"}'), ('OTHER', 'CONT DUMP', 2, '{"CONTRACT_NO":"X"}')`);
+  assert.deepEqual((await reportRows(db, 'erp-contracts')).map(r => r.CONTRACT_NO), ['NEW', 'OLD', 'BAD']);
+
   await db.query('DROP TABLE rm_rate');
   await assert.rejects(reportRows(db, 'rates'), (e: any) => e.code === '42P01');
 });

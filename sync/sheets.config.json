@@ -193,6 +193,108 @@
           "_note": "checked live 24 Nov 2026: rows 1-2 = RM group labels, row 3 = FG Item / BOM Code / RM names, BOMs from row 4"
         }
       ]
+    },
+    {
+      "key": "ITEM_MASTER",
+      "spreadsheetId": "1LIC8GGgs7K7XWf8kUJFwvfOWpAkElYp6SJ83jk9wWGM",
+      "tabs": [
+        {
+          "name": "laser Item master",
+          "headerRow": 1,
+          "_note": "checked live 25 Nov 2026: Item Level 1..3, Item Code, Item Name, Main UM, ... (about 24,000 rows)"
+        }
+      ],
+      "_note": "Power BI ITEM MASTER (source map from Puja, 25 Nov 2026)"
+    },
+    {
+      "key": "SPEC_MASTER",
+      "spreadsheetId": "11TvKgxPLsAc3TVhGH1DcGePZwQiXZMTOm4OiUGOwaA8",
+      "tabs": [
+        {
+          "name": "Specification Master",
+          "headerRow": 1,
+          "_note": "checked live 25 Nov 2026: ITEM SCHEDULE, PROPOSE ERP ITEM NAME @ CODE, Utility, ..., one column per RM head (about 12,400 rows)"
+        }
+      ],
+      "_note": "Power BI Specification Master; an export from Smartsheet"
+    },
+    {
+      "key": "TYPE_TEST",
+      "spreadsheetId": "1WQxiamMK48ibN2WZlGdpIK4O3Ngyrn30jskHSklZAio",
+      "_note": "NEW TYPE TEST. Probable source of the Power BI Type Test page (unconfirmed by Puja, 25 Nov 2026). Other tabs (REQD, NOT AVAILABLE, ORDER, PHOTOS) are not synced.",
+      "tabs": [
+        {
+          "name": "TYPE TESTS AVAILABLE",
+          "headerRow": 1,
+          "_note": "checked live 25 Nov 2026: Sr No, Laboratory, Test Certificate No, Cable/Conductor Size, Type, Voltage Grade, Issued, Expire, ERP Code, Item Name"
+        },
+        {
+          "name": "ATTACHMENT",
+          "headerRow": 1,
+          "_note": "checked live 25 Nov 2026: DOCKET NO, UTILITY, LINK"
+        }
+      ]
+    },
+    {
+      "key": "DRUM_INDENT",
+      "spreadsheetId": "1ouQeYujjZxM0yPDJwJcV-f7heyTrsBrthbPRRr58yM4",
+      "_note": "DRUM INDENT. Probable source of drum standards (unconfirmed; Puja named no tabs). Synced: the four tabs that describe drums. Not synced: purchase dumps and working tabs (DRUM LIST, review-final, item wise reqt-vinay, pivots, VENDOR'S DETAILS, LEGGINGS, TIE RODS, FLANGE, PO DUMP, dump approved mc).",
+      "tabs": [
+        {
+          "name": "BOM FOR DRUM",
+          "headerRow": 1,
+          "_note": "checked live 25 Nov 2026: fg code, bom id, fg item, rm CODE, ITEM NAME, PCS/NO/KG, NEEDED, then dated requirement columns"
+        },
+        {
+          "name": "DRUM TYPE/STOCK",
+          "headerRow": 1,
+          "_note": "checked live 25 Nov 2026: CODE, DRUM NAME, DRUM REQ, STOCK, FINAL DRUM REQ"
+        },
+        {
+          "name": "FLANGE TYPE/WEIGHT",
+          "headerRow": 1,
+          "_note": "checked live 25 Nov 2026: CODE, Item Name, Cost/Project, Our Max Rate, WEIGHT (KG), rate per kg"
+        },
+        {
+          "name": "drum rates",
+          "headerRow": 1,
+          "_note": "checked live 25 Nov 2026 (hidden tab): ITEM_CODE, ITEM_NAME, SUPPLIER, PUR ODR NO/DATE, GRN NO/DATE, qty, UM, RATE"
+        }
+      ]
+    },
+    {
+      "key": "TENDER_DUMP",
+      "spreadsheetId": "1N0JX5fOqta71lKGA99iOz9OZ66MtQOn7dlGxhqtzR4w",
+      "_note": "TENDER DUMP (Copy - auto sync), shared 26 Nov 2026 in place of the original 1R3pTO72Q4O3QtfvKp2asL7a2BrpNyFk1ECLrDZ_e464 (still 403). ERP dumps named in the source map (Puja, 25 Nov 2026). Not synced: FO ENGINE, GRN, STOCK TRANSFER, TRANSPORTER MAST (#REF!).",
+      "tabs": [
+        {
+          "name": "TENDER DUMP",
+          "headerRow": 1,
+          "_note": "checked live 26 Nov 2026: VRDATE, VRNO, UTILITY CODE/NAME, CUSTOMER CODE/NAME, TENDER DESC, TENDER REFNO, TENDER TYPE, DUE DATE, BID SUBMITTED DATE, MIN/MAX QTN AMT (LAKHS)"
+        },
+        {
+          "name": "QTN DUMP",
+          "headerRow": 1,
+          "_note": "checked live 26 Nov 2026: one row per quotation line (about 92,900 rows): TENDER_VRNO, QUOTATION_NO, QUOTATION_DATE, ENQUIRY_NO, ITEM_CODE, ITEM_NAME, UM, CLIENT, CONTRACT_NO, QUOTATION_QTY, RATE, ..."
+        },
+        {
+          "name": "CONT DUMP",
+          "headerRow": 1,
+          "_note": "checked live 26 Nov 2026: one row per contract line: CONTRACT_NO, CONTRACT_DATE, CUSTOMER_CODE, ITEM_CODE, ITEM_NAME, QUOTATION_NO, RATE, CONTRACT_QTY, INVOICE_QTY, BALANCE, CONT_VALUE, TENDER_VRNO"
+        }
+      ]
+    },
+    {
+      "key": "PRE_APPROVED_GTP",
+      "spreadsheetId": "19eQgzJkM_eAADTVtFQNJoo94D2wTHvdb4_UvZK_RRik",
+      "_note": "PREE APPROVED GTP ATTACHMENT (Responses) (Copy - auto sync), shared 26 Nov 2026 in place of the original 1IwftJDe2a_5nqyfMPfQWHW7pn6lJ8sYoKr5_O2ncZWg (still 403). Source of the Power BI page Pree Aproved GTP. Not synced: tab Utility (a picklist).",
+      "tabs": [
+        {
+          "name": "Pree approved GTP",
+          "headerRow": 1,
+          "_note": "checked live 26 Nov 2026: Timestamp, ITEM CODE, Utility, STATE, Country, Project schem, GTP ATTACHMENT (Drive link), APPROVAL STATUS, Attachment Type, Contract Number, Item Name, STATUS"
+        }
+      ]
     }
   ],
   "googleSheetsDiscovery": {
@@ -217,5 +319,9 @@
       "QUOTATION EXPORT AND REVIEW",
       "BOARD ATTACHMENT"
     ]
+  },
+  "googleSheetsPending": {
+    "_note": "Named in the source map (Puja, 25 Nov 2026) but the service account gets 403. Add under googleSheets, with the header row checked, once shared as Viewer.",
+    "sheets": []
   }
 }

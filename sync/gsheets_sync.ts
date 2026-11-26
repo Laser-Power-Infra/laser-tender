@@ -29,8 +29,10 @@ export function rowsToSnapshot(grid: unknown[][], headerRow = 1): { row_no: numb
 export async function replaceTab(db: Db, sheetKey: string, tab: string, rows: { row_no: number; data: Record<string, string> }[]) {
   await inTransaction(db, async () => {
     await db.query('DELETE FROM sheet_snapshot WHERE sheet_key=$1 AND tab_name=$2', [sheetKey, tab]);
-    for (const r of rows) {
-      await db.query('INSERT INTO sheet_snapshot(sheet_key,tab_name,row_no,data) VALUES ($1,$2,$3,$4::jsonb)', [sheetKey, tab, r.row_no, JSON.stringify(r.data)]);
+    // 2000 rows per statement: some tabs have tens of thousands of rows
+    for (let i = 0; i < rows.length; i += 2000) {
+      await db.query(`INSERT INTO sheet_snapshot(sheet_key,tab_name,row_no,data)
+                      SELECT $1, $2, x.row_no, x.data FROM jsonb_to_recordset($3::jsonb) AS x(row_no integer, data jsonb)`, [sheetKey, tab, JSON.stringify(rows.slice(i, i + 2000))]);
     }
   });
   return rows.length;
