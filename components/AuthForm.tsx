@@ -10,10 +10,27 @@ function safeCallbackUrl(url?: string): string {
   return url && url.startsWith("/") && !url.startsWith("//") && !url.startsWith("/\\") ? url : "/";
 }
 
-export function AuthForm({ mode, callbackUrl }: { mode: "signin" | "signup"; callbackUrl?: string }) {
+function authErrorMessage(code?: string): string | null {
+  if (!code) return null;
+  if (code === "AccessDenied") return "Your Google account has no access. Ask an admin to add your email.";
+  if (code === "CredentialsSignin") return "Wrong email or password.";
+  return "Sign in failed. Please try again.";
+}
+
+export function AuthForm({
+  mode,
+  callbackUrl,
+  authError,
+  googleEnabled = false,
+}: {
+  mode: "signin" | "signup";
+  callbackUrl?: string;
+  authError?: string;
+  googleEnabled?: boolean;
+}) {
   const isSignUp = mode === "signup";
   const target = safeCallbackUrl(callbackUrl);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(authErrorMessage(authError));
   const [busy, setBusy] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -104,6 +121,17 @@ export function AuthForm({ mode, callbackUrl }: { mode: "signin" | "signup"; cal
         <button type="submit" disabled={busy} className="tender-refresh-sidebar-btn">
           {busy ? "Please wait..." : isSignUp ? "Create account" : "Sign in"}
         </button>
+
+        {googleEnabled && !isSignUp && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => signIn("google", { callbackUrl: target })}
+            className="tender-refresh-sidebar-btn"
+          >
+            Sign in with Google
+          </button>
+        )}
 
         <p className="m-0 text-center text-[12px] text-[#5f6368]">
           {isSignUp ? "Already have an account? " : "No account yet? "}
