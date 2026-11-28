@@ -4,7 +4,8 @@ import type { Db } from '../sync/lib.ts';
 
 // `from` says what the data was synced from, for the "last synced" line: 'smartsheet' or a sheet_snapshot sheet_key.
 export type Report =
-  | { label: string; cols: string[]; sql: string; order: string; note?: string; from?: string; sourceNeeded?: undefined }
+  // `link`: the cells of column `col` open the URL that the query returns in its (hidden) column `href`, when it has one
+  | { label: string; cols: string[]; sql: string; order: string; note?: string; from?: string; link?: { col: string; href: string }; sourceNeeded?: undefined }
   | { label: string; sourceNeeded: string };
 
 const pick = (cols: string[]) => cols.map(c => `data->>'${c}' AS "${c}"`).join(', ');
@@ -33,7 +34,18 @@ function snap(label: string, sheet: string, tab: string, cols: string[], note?: 
 const needed = (label: string, table: string, guess: string, who = 'Puja to supply the source'): Report =>
   ({ label, sourceNeeded: `Source needed: ${table} — ${guess} — ${who}` });
 
-const PERFORMANCE_GUESS = 'LASER PERFORMANCE CERTIFICATE and ATTACHMENT OF PERFORMENCE CERTIFICATE (Responses); sheet IDs not given, columns not read';
+const TYPE_TEST_COLS = ['Sr No', 'Laboratory', 'Test Certificate No', 'Cable/Conductor Size', 'Type', 'Voltage Grade', 'Issued', 'Expire', 'Cerificate Available', 'ERP Code',
+  'Item Name', 'Item Level 3 Name', 'File No', 'Hard copy'];
+
+// Headers of the ITEM COSTING tab of the Claude costing sheet, as they are in the sheet.
+const ITEM_COSTING_COLS = ['Item ID', 'ENQ Docket', 'Party', 'Utility', 'Quotation No', 'Party item name', 'ERP item', 'ERP code', 'Qty (km)', 'Category', 'Design basis (Claude)',
+  'Touhid key', 'RM cost/km (Claude)', 'RM cost/km (Touhid)', 'RM kg/km total (Claude)', 'RM kg/km total (Touhid)', 'Drum/km (Claude - input)', 'Drum/km (Touhid)', 'Extra cons %',
+  'MFG % (Claude)', 'MFG % (Touhid)', 'PROF % (Claude)', 'PROF % (Touhid)', '1st EXW/km (Claude)', '1st EXW/km (Touhid)', 'Intt % (Claude)', 'Intt % (Touhid)', 'Insp % (Claude)',
+  'Insp % (Touhid)', 'TTR % (Claude)', 'TTR % (Touhid)', 'EXW/km (Claude)', 'EXW/km (Touhid)', 'Diff EXW/km (Claude - Touhid)', 'Diff %', 'Freight/km (Claude - input)',
+  'Freight/km (Touhid)', 'Price incl freight/km (Claude)', 'GST %', 'Price incl GST & freight/km (Claude)', 'Price incl GST & freight/km (Touhid)', 'Total value (Claude)',
+  'Total value (Touhid, at enquiry qty)'];
+/** On the page the sheet's "Touhid" side is called "As per spec master" (asked 28 Nov 2026). */
+const specMasterLabel = (header: string) => header.replace(/Touhid/g, 'As per spec master');
 
 // Each query aliases its visible columns to the header text; `order` may use extra (hidden) columns.
 export const REPORTS: Record<string, Report> = {
@@ -86,15 +98,14 @@ export const REPORTS: Record<string, Report> = {
     ['CONTRACT_NO', 'CONTRACT_DATE', 'CUSTOMER_CODE', 'PARTY_ORDER_NO', 'ITEM_CODE', 'ITEM_NAME', 'UM', 'RATE', 'CONTRACT_QTY', 'INVOICE_QTY', 'BALANCE', 'CONT_VALUE', 'QUOTATION_NO', 'FREIGHT_BASIS', 'TENDER_VRNO']),
 
   // ── Pages added for the 27 Nov 2026 guideline: every Power BI page exists, with data or a "Source needed" notice ──
+  // The ITEM COSTING tab of the Claude costing sheet, newest item first. The sheet's "Touhid" columns are shown as "As per spec master".
   'auto-quotation': {
     label: 'Auto quotation',
-    cols: ['Docket', 'Revision', 'Status', 'RM rate policy', 'RM base date', 'Items', 'Created by', 'Created'],
-    note: 'draft costing runs made in this dashboard; nothing here has been sent',
-    sql: `SELECT r.id, r.docket_no AS "Docket", r.revision::text AS "Revision", r.status::text AS "Status", r.rm_rate_policy AS "RM rate policy",
-        to_char(r.rm_base_date, 'DD-Mon-YYYY') AS "RM base date", (SELECT count(*) FROM item_costing i WHERE i.run_id = r.id)::text AS "Items",
-        r.created_by AS "Created by", to_char(r.created_at, 'DD-Mon-YYYY') AS "Created"
-      FROM costing_run r`,
-    order: 'id DESC',
+    cols: ITEM_COSTING_COLS.map(specMasterLabel),
+    note: 'item costing from the Claude costing sheet',
+    sql: `SELECT row_no, ${ITEM_COSTING_COLS.map(c => `data->>'${c}' AS "${specMasterLabel(c)}"`).join(', ')}
+      FROM sheet_snapshot WHERE sheet_key = 'CLAUDE_COSTINGS' AND tab_name = 'ITEM COSTING'`,
+    order: 'row_no DESC', from: 'CLAUDE_COSTINGS',
   },
   'cost-sheet': {
     label: 'Cost calculation sheet',
@@ -121,39 +132,87 @@ export const REPORTS: Record<string, Report> = {
     sql: `SELECT bom_id AS "BOM ID", erp_code AS "ERP code", rm_name AS "Raw material", consumption::text AS "Consumption", unit AS "Unit" FROM non_chain_bom`,
     order: `"BOM ID", "Raw material"`, from: 'MASTER_BOM_ACTUAL',
   },
-  'gtp-master': needed('GTP master', 'GTP MASTER', 'not found'),
   'csd-master': needed('CSD master', 'CSD UPLOAD GRID', 'not found'),
   'bom-quad': needed('BOM master quad', 'BOM QUAD CABLES', 'not found'),
   'dd-master': snap('DD master', 'DRUM_INDENT', 'DRUM TYPE/STOCK', ['CODE', 'DRUM NAME', 'DRUM REQ', 'STOCK', 'FINAL DRUM REQ'],
     'drum standards from DRUM INDENT only; source still needed for DRUM_DRAWING_ATTACHMENT (drum drawings)'),
+  'drums-per-truck': snap('Drums per truck master', 'CLAUDE_COSTINGS', 'DRUMS PER TRUCK MASTER',
+    ['TRUCK_TYPE', 'DRUM_TYPE', 'DRUM_SIZE', 'MAX_DRUMS_PER_TRUCK', 'TYPICAL_DRUMS_PER_TRUCK', 'REQS_SEEN', 'MAX_SEEN_IN_REQ', 'FO_NOS', 'DRUMS_IN_REQ', 'TRUCKS_PLACED',
+      'WT_PER_DRUM_KG', 'LOAD_AT_MAX_T', 'TRUCK_CAP_T', 'RAW_MAX_INCL_OVERLOAD', 'CHECK']),
   'item-master': snap('Item master', 'ITEM_MASTER', 'laser Item master',
     ['Item Code', 'Item Name', 'Proposed Item Name', 'Item Level 1 Name', 'Item Level 2 Name', 'Item Level 3 Name', 'Item Nature Name', 'Main UM']),
   'spec-master': snap('Specification master', 'SPEC_MASTER', 'Specification Master',
     ['ITEM SCHEDULE', 'PROPOSE ERP ITEM NAME @ CODE', 'Utility', 'STATE', 'Country', 'Voltage Grade', 'Conductor', 'Insulation', 'Armouring', 'Inner Sheath', 'Outer Sheath',
       'PROPOSE DRUM TYPE', 'FIRST DOCKET NO', 'Source', 'Availibility']),
-  'type-test': snap('Type test', 'TYPE_TEST', 'TYPE TESTS AVAILABLE',
-    ['Sr No', 'Laboratory', 'Test Certificate No', 'Item Name', 'Cable/Conductor Size', 'Type', 'Voltage Grade', 'Issued', 'Expire', 'ERP Code', 'Cerificate Available']),
+  // the Type Test Ledger workbook, tab TTR JIST, in its own column order; loaded by sync/type_test_ledger.ts
+  // The certificate number opens the PDF from the office file server, as it does in the ledger (app/api/type-test/file).
+  'type-test': {
+    label: 'Type test', cols: TYPE_TEST_COLS, from: 'TYPE_TEST_LEDGER', order: 'row_no',
+    note: 'from the Type Test Ledger file, loaded by hand',
+    link: { col: 'Test Certificate No', href: 'certificate_href' },
+    sql: `SELECT row_no, ${pick(TYPE_TEST_COLS)},
+        CASE WHEN coalesce(data->>'Certificate file', '') <> '' THEN '/api/type-test/file?row=' || row_no END AS certificate_href
+      FROM sheet_snapshot WHERE sheet_key = 'TYPE_TEST_LEDGER' AND tab_name = 'TTR JIST'`,
+  },
   'costing-sheets': {
     label: 'Attachment of costing sheet',
     cols: ['Docket', 'Party', 'Utility', 'Quotation no.', 'Items costed', 'Claude costing sheet', 'Touhid costing sheet', 'Touhid approval', 'Review status'],
-    note: "costing sheets only, draft; Touhid's file shows as its name because the sheet export carries no link",
-    sql: `SELECT row_no, data->>'ENQ Docket No' AS "Docket", data->>'Party' AS "Party", data->>'Utility' AS "Utility", data->>'Quotation No' AS "Quotation no.",
-        data->>'Items costed' AS "Items costed",
-        CASE WHEN coalesce(data->>'Drive file id', '') <> '' THEN 'https://drive.google.com/file/d/' || (data->>'Drive file id') || '/view' END AS "Claude costing sheet",
-        data->>'Touhid costing sheet (link)' AS "Touhid costing sheet", data->>'Touhid approval' AS "Touhid approval", data->>'Touhid remarks / review status' AS "Review status"
-      FROM sheet_snapshot WHERE sheet_key = 'CLAUDE_COSTINGS' AND tab_name = 'CLAUDE COSTING SHEETS' AND coalesce(data->>'ENQ Docket No', '') <> ''`,
+    note: "costing sheets only, draft; Touhid's sheet is the latest upload for the docket in the Cost sheet",
+    // Touhid's link: the newest row for the same docket in the costing upload form (COST_UPLOAD); without one, the text from Claude's sheet
+    sql: `SELECT c.row_no, c.data->>'ENQ Docket No' AS "Docket", c.data->>'Party' AS "Party", c.data->>'Utility' AS "Utility", c.data->>'Quotation No' AS "Quotation no.",
+        c.data->>'Items costed' AS "Items costed",
+        CASE WHEN coalesce(c.data->>'Drive file id', '') <> '' THEN 'https://drive.google.com/file/d/' || (c.data->>'Drive file id') || '/view' END AS "Claude costing sheet",
+        coalesce(u.link, c.data->>'Touhid costing sheet (link)') AS "Touhid costing sheet", c.data->>'Touhid approval' AS "Touhid approval", c.data->>'Touhid remarks / review status' AS "Review status"
+      FROM sheet_snapshot c
+      LEFT JOIN (SELECT DISTINCT ON (upper(btrim(data->>'ENQ Docket No'))) upper(btrim(data->>'ENQ Docket No')) AS docket, btrim(data->>'Upload Costing Sheet') AS link
+          FROM sheet_snapshot WHERE sheet_key = 'COST_UPLOAD' AND tab_name = 'Cost' AND btrim(coalesce(data->>'ENQ Docket No', '')) <> '' AND btrim(coalesce(data->>'Upload Costing Sheet', '')) <> ''
+          ORDER BY 1, row_no DESC) u ON u.docket = upper(btrim(c.data->>'ENQ Docket No'))
+      WHERE c.sheet_key = 'CLAUDE_COSTINGS' AND c.tab_name = 'CLAUDE COSTING SHEETS' AND coalesce(c.data->>'ENQ Docket No', '') <> ''`,
     order: 'row_no DESC', from: 'CLAUDE_COSTINGS',
   },
   'board-attachment': needed('Board attachment', 'BOARD APPROVAL ATTACHMENT', 'not found'),
-  'supply-history': needed('Supply history', 'supply / invoice tables (INV MASTER, CONT_UTILITY)', 'not found'),
-  'supply-sale-bill': needed('Supply history for sale bill', 'supply / invoice tables (INV MASTER)', 'not found'),
-  // Second Power BI report, "CONT EX 2" (Contract Execution Report, live ERP): guideline 9.9. Its five pages exist now; each needs a
+  // Our copy of the tender executive dashboard's table (sync/supply_history_sync.ts), newest bill first. No rate or amount on the page:
+  // supply records go out as quantities and dates, never prices. Like that dashboard, rows without a proper FY are left out.
+  'supply-history': {
+    label: 'Supply history',
+    cols: ['FY', 'Sale bill no.', 'Sale bill date', 'Party', 'Utility', 'Docket', 'Item code', 'Item schedule', 'Item name', 'Invoice qty', 'LR no.', 'Truck no.',
+      'Party ref no.', 'Party ref date', 'Contract no.', 'Quotation no.'],
+    note: 'copied from the tender executive dashboard; rates and amounts are not shown',
+    // The dates are text: mostly 28-May-26, some a UTC timestamp (2026-08-13T18:30:00.000Z is 14 Aug in India). Both are shown as
+    // 14-Aug-2026; anything else is shown as written and sorts last instead of failing the page.
+    sql: `SELECT d, fy AS "FY", "saleBillNumber" AS "Sale bill no.", coalesce(to_char(d, 'DD-Mon-YYYY'), "saleBillDate") AS "Sale bill date", "partyName" AS "Party",
+        utility AS "Utility", "docketNo" AS "Docket", "itemCode" AS "Item code", "itemSchedule" AS "Item schedule", "itemName" AS "Item name",
+        "invoiceQty"::text AS "Invoice qty", "lrNo" AS "LR no.", "truckNo" AS "Truck no.", "partyRefNo" AS "Party ref no.", "partyRefDate" AS "Party ref date",
+        "contractVrNo" AS "Contract no.", "quotationNo" AS "Quotation no."
+      FROM (SELECT *, CASE WHEN "saleBillDate" ~ '^[0-9]{1,2}-[A-Za-z]{3}-[0-9]{2}$' THEN to_date("saleBillDate", 'DD-Mon-YY')
+          WHEN "saleBillDate" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$' THEN ("saleBillDate"::timestamptz AT TIME ZONE 'Asia/Kolkata')::date END AS d
+        FROM "SupplyHistory" WHERE fy ~ '^[0-9]{2}-[0-9]{2}$') s`,
+    order: `d DESC NULLS LAST, "Sale bill no." DESC, "Item code"`, from: 'SUPPLY_HISTORY',
+  },
+  // Second Power BI report, "CONT EX 2" (Contract Execution Report, live ERP): guideline 9.9. Four of its five pages exist now (not the home page); each needs a
   // per-page spec read from the report in Puja's session and approved by her before it is built.
-  ...Object.fromEntries(([['ce-home', 'Contract execution home'], ['ce-lot-review', 'Lot review'], ['ce-pending-order', 'Pending order'], ['ce-tva', 'TVA'],
+  ...Object.fromEntries(([['ce-lot-review', 'Lot review'], ['ce-pending-order', 'Pending order'], ['ce-tva', 'TVA'],
     ['ce-rm-req', 'RM req against balance MC']] as const).map(([key, label]) =>
     [key, needed(label, 'CONT EX 2 live ERP feed', 'not found in the connected sheets; the page layout is also still to be read from the report', 'Puja to name the source')])),
-  performance: needed('Performance history', 'performance certificate tables', PERFORMANCE_GUESS, 'Puja to share the two sheets'),
-  'performance-2': needed('Performance history (2)', 'performance certificate tables', PERFORMANCE_GUESS, 'Puja to share the two sheets'),
+  // Our copy of the tender executive dashboard's performance_certificates (sync/supply_history_sync.ts), in serial order. The name opens
+  // the file on the office file server. "Duplicate of" is the serial of the original; "Sale bills" counts the linked supply history.
+  // The dates are stored as UTC timestamps of midnight in India, so they are read back in Indian time.
+  performance: {
+    label: 'Performance history',
+    cols: ['Serial', 'Certificate', 'Party', 'Utility / client', 'Utility names', 'Item schedule', 'Use / not use', 'Issue date', 'Signing date', 'Party reference no.',
+      'Duplicate of', 'Sale bills'],
+    note: 'copied from the tender executive dashboard',
+    link: { col: 'Certificate', href: 'certificate_href' },
+    sql: `SELECT p.serial AS n, CASE WHEN p."certificateUrl" ~ '^https?://' THEN p."certificateUrl" END AS certificate_href, p.serial::text AS "Serial",
+        p."certificateName" AS "Certificate", p."partyName" AS "Party", p."utilityOrClient" AS "Utility / client", p."utilityNames" AS "Utility names",
+        p."itemSchedule" AS "Item schedule", p."useNotUse" AS "Use / not use",
+        to_char(p."issueDate" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata', 'DD-Mon-YYYY') AS "Issue date",
+        to_char(p."signingDate" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata', 'DD-Mon-YYYY') AS "Signing date",
+        p."partyReferenceNo" AS "Party reference no.", o.serial::text AS "Duplicate of",
+        (SELECT nullif(count(DISTINCT s."saleBillNumber"), 0)::text FROM "_CertSupplyHistory" l JOIN "SupplyHistory" s ON s.id = l."B" WHERE l."A" = p.id) AS "Sale bills"
+      FROM performance_certificates p LEFT JOIN performance_certificates o ON o.id = p."duplicateOfId"`,
+    order: 'n', from: 'SUPPLY_HISTORY',
+  },
 };
 
 /** Every row of a report (search, column filters and paging happen in the browser table). Throws pg 42P01 while the tables are not deployed. */
@@ -172,6 +231,7 @@ export async function lastSync(db: Db, key: string): Promise<{ at: Date; copy: b
   if (tab.sourceNeeded !== undefined || !tab.from) return null;
   const r = tab.from === 'smartsheet'
     ? await db.query(`SELECT max(last_success_at) AS at FROM sync_state WHERE job LIKE 'smartsheet:%'`)
-    : await db.query(`SELECT max(finished_at) AS at FROM sync_log WHERE ok AND job LIKE $1`, [`gsheets:${tab.from}:%`]);
+    // any loader: gsheets:<key>:<tab> from the daily sync, xlsx:<key>:<tab> from a file load
+    : await db.query(`SELECT max(finished_at) AS at FROM sync_log WHERE ok AND job LIKE $1`, [`%:${tab.from}:%`]);
   return r.rows[0]?.at ? { at: new Date(r.rows[0].at), copy: COPIES.has(tab.from) } : null;
 }

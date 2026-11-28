@@ -725,6 +725,23 @@
     scrollbar-width: thin;
   }
 
+  /* Report tables (FilterTable): the home page's cell format. Long text wraps and scrolls inside a fixed-height row. */
+  .cell-wrap-scroll {
+    max-height: 36px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    white-space: normal;
+    word-break: break-word;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+
+  /* an editor in a cell (hover summaries on the Page status list) needs its full height */
+  .cell-wrap-scroll:has(textarea) {
+    max-height: none;
+    overflow: visible;
+  }
+
   .tender-item-stack,
   .tender-qty-stack,
   .raw-materials-grid {

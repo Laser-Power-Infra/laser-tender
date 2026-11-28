@@ -18,13 +18,21 @@ services:
       PORT: 4173
       HOSTNAME: 0.0.0.0
 
-      
+      # Path inside the container: type test certificates (same volume and path as tender-executive-dashboard)
+      TYPE_TEST_FILES_PATH: /mnt/condutor/Updated TTR
+
+    volumes:
+      - condutor:/mnt/condutor:ro
 
     restart: unless-stopped
 
     networks:
       - infra
 
+volumes:
+  condutor:
+    external: true
+    name: infrastructure_condutor
 
 
 networks:

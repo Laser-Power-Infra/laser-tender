@@ -329,6 +329,81 @@ model RefPicklist {
   @@map("ref_picklist")
 }
 
+// Copied as it is from the tender executive dashboard (same model there); filled by sync/supply_history_sync.ts.
+model SupplyHistory {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fy             String?
+  saleBillNumber String?
+  saleBillDate   String?
+  partyName      String?
+  itemCode       String?
+  itemSchedule   String?
+  itemName       String?
+  lrNo           String?
+  truckNo        String?
+  partyRefNo     String?
+  partyRefDate   String?
+  contractVrNo   String?
+  quotationNo    String?
+  utility        String?
+  docketNo       String?
+  rate           Float?
+  invoiceQty     Float?
+  invoiceAmt     Float?
+
+  documentUrls        String?
+  attachmentUrl       String?
+  email               String?
+  contactNo           String?
+  certificateUrl      String?
+  certificateFileName String?
+  certificateSentDate DateTime?
+
+  lastSyncedAt DateTime @default(now())
+
+  // Performance certificates whose partyReferenceNo matches this row's partyRefNo.
+  performanceCertificates PerformanceCertificate[] @relation("CertSupplyHistory")
+
+  @@unique([saleBillNumber, itemCode])
+}
+
+// Copied as it is from the tender executive dashboard (same model there); filled by sync/supply_history_sync.ts.
+model PerformanceCertificate {
+  id        String   @id @default(uuid())
+  serial    Int      @unique @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  certificateName String?
+  certificateUrl  String?
+  partyName       String?
+  utilityOrClient String?
+  utilityNames    String?
+  itemSchedule    String?
+  useNotUse       String?
+
+  // AI-extracted from the certificate document.
+  issueDate   DateTime?
+  signingDate DateTime?
+
+  // Party reference printed on the certificate; also links the matching SupplyHistory rows.
+  partyReferenceNo String?
+
+  // Set when this certificate is a duplicate; points at the original.
+  duplicateOfId String?
+  duplicateOf   PerformanceCertificate?  @relation("CertDuplicate", fields: [duplicateOfId], references: [id], onDelete: SetNull)
+  duplicates    PerformanceCertificate[] @relation("CertDuplicate")
+
+  // SupplyHistory rows whose partyRefNo matches this certificate's partyReferenceNo.
+  supplyHistories SupplyHistory[] @relation("CertSupplyHistory")
+
+  @@index([duplicateOfId])
+  @@map("performance_certificates")
+}
+
 model SheetSnapshot {
   sheet_key String
   tab_name  String

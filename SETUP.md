@@ -64,6 +64,7 @@ Make sure these exist (values should match what the running app uses):
 | `ENVIRONMENT` | `PROD` (so scripts use `DATABASE_URL`) |
 | `DATABASE_URL` | `postgresql://<user>:<pass>@localhost:5432/quotation-backup` (or your DB) |
 | `COSTING_FILE_NETWORK_PATH` | the costing folder path the server can read. **Use the UNC path** `\\192.168.1.242\dipankar roy\COSTING & INVOLVEMENT` so the scheduled task works even when no user is logged in (a mapped `Z:` is per-login-session and may be missing). |
+| `TYPE_TEST_FILES_PATH` | the `Updated TTR` folder on the office file server, as the app can read it. Default `\\192.168.1.242\tender laser\MD Work\Updated TTR`. The Type test page opens certificate PDFs from here (and from its parent folder, for the few links that point one level up). In Docker it is set in `docker-compose.yml` to `/mnt/condutor/Updated TTR`, on the `infrastructure_condutor` volume that tender-executive-dashboard also uses. |
 | `COSTING_PATH_ENCRYPTION_KEY` | **MUST be identical** to the key already used on other machines. Existing encrypted paths in the DB were encrypted with this key; if it differs, decrypting old records and the dashboard download will break. |
 | `COSTING_NIGHTLY_SCAN_LIMIT` | dockets to search per run (e.g. `500`). **Set this** so each night finishes in time (see below). |
 | `COSTING_SCAN_RETRY_DAYS` | optional; how many days before a docket that was searched but not found is retried (default `7`). |

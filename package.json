@@ -20,6 +20,8 @@
     "db:seed": "tsx sync/seed.ts",
     "sync:smartsheet": "node --liftoff-only --import tsx sync/smartsheet_sync.ts",
     "sync:gsheets": "tsx sync/gsheets_sync.ts",
+    "sync:supply-history": "tsx sync/supply_history_sync.ts",
+    "load:type-test": "tsx sync/type_test_ledger.ts",
     "sync:attachments": "tsx sync/attachments_sync.ts",
     "sync:mirror": "tsx sync/mirror_to_smartsheet.ts",
     "parity": "tsx sync/parity_check.ts",

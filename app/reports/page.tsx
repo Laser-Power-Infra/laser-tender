@@ -91,7 +91,12 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
             <FilterTable key={tabKey} title={tab.label} badge={[tab.note, freshness].filter(Boolean).join(" · ") || undefined} cols={tab.cols.map(label => ({ label }))} rows={rows.map(r => {
               const text = tab.cols.map(c => r[c] ?? "");
               // a cell that is only a web link (e.g. the GTP attachment) opens in a new tab
-              const cells = text.some(isLink) ? text.map((v, i) => isLink(v) ? <a key={i} href={v} target="_blank" rel="noopener noreferrer" className="underline">Open</a> : (v || <span className="smartsheet-null-cell">-</span>)) : undefined;
+              // and the report's own link column (e.g. a type test certificate) opens the file the row points to
+              const href = tab.link ? r[tab.link.href] : null;
+              const linkAt = href ? tab.cols.indexOf(tab.link!.col) : -1;
+              const cells = href || text.some(isLink) ? text.map((v, i) =>
+                i === linkAt ? <a key={i} href={href!} target="_blank" rel="noopener noreferrer" className="underline">{v || "Open"}</a>
+                : isLink(v) ? <a key={i} href={v} target="_blank" rel="noopener noreferrer" className="underline">Open</a> : (v || <span className="smartsheet-null-cell">-</span>)) : undefined;
               return { text, cells };
             })} />
           )}

@@ -1096,14 +1096,15 @@ const TenderDashboardPage: React.FC = () => {
             <MultiSelectDropdown
               selected={colFilterSelected["tenderPurchase"] || []}
               options={cascadingOptions["tenderPurchase"] || []}
-              isOpen={openColDropdown === "tenderPurchase"}
+              // own open-key: "tenderPurchase" is also a table column, sharing it opened both panels
+              isOpen={openColDropdown === "tenderPurchase-sidebar"}
               onToggle={v => handleColFilterToggle("tenderPurchase", v)}
               onClear={() => handleColFilterClear("tenderPurchase")}
               onSelectAll={() => {
                 setColFilterSelected(prev => ({ ...prev, tenderPurchase: [...(cascadingOptions["tenderPurchase"] || [])] }));
                 setPage(1);
               }}
-              onToggleOpen={() => setOpenColDropdown(openColDropdown === "tenderPurchase" ? null : "tenderPurchase")}
+              onToggleOpen={() => setOpenColDropdown(openColDropdown === "tenderPurchase-sidebar" ? null : "tenderPurchase-sidebar")}
               hasActive={(colFilterSelected["tenderPurchase"] || []).length > 0}
             />
           </div>

@@ -12,10 +12,17 @@ test('every report runs against the schema, returns its columns, and has a page 
   await pglite.exec(schemaSql());
   const db = pglite as unknown as Db;
   await db.query(`INSERT INTO sheet_snapshot (sheet_key, tab_name, row_no, data) VALUES
-    ('TYPE_TEST', 'TYPE TESTS AVAILABLE', 1, '{"Sr No":"1","Laboratory":"CPRI"}'),
+    ('TYPE_TEST_LEDGER', 'TTR JIST', 2, '{"Sr No":"1","Laboratory":"CPRI","Certificate file":"Updated TTR/a.pdf"}'),
+    ('TYPE_TEST_LEDGER', 'TTR JIST', 3, '{"Sr No":"2"}'),
     ('CLAUDE_COSTINGS', 'CLAUDE COSTING SHEETS', 1, '{"ENQ Docket No":"ENQ-1","Drive file id":"abc"}'),
-    ('CLAUDE_COSTINGS', 'CLAUDE COSTING SHEETS', 2, '{"ENQ Docket No":""}')`);
-  await db.query(`INSERT INTO sync_log (job, started_at, finished_at, ok) VALUES ('gsheets:TYPE_TEST:TYPE TESTS AVAILABLE', now(), now(), true)`);
+    ('CLAUDE_COSTINGS', 'CLAUDE COSTING SHEETS', 2, '{"ENQ Docket No":""}'),
+    ('CLAUDE_COSTINGS', 'CLAUDE COSTING SHEETS', 3, '{"ENQ Docket No":"ENQ-2","Touhid costing sheet (link)":"NOT DONE BY TOUHID"}'),
+    ('CLAUDE_COSTINGS', 'ITEM COSTING', 2, '{"Item ID":"IT001","RM cost/km (Touhid)":"4,867","Diff EXW/km (Claude - Touhid)":"10"}'),
+    ('COST_UPLOAD', 'Cost', 2, '{"ENQ Docket No":"ENQ-1","Upload Costing Sheet":"https://drive.google.com/open?id=old"}'),
+    ('COST_UPLOAD', 'Cost', 3, '{"ENQ Docket No":" enq-1 ","Upload Costing Sheet":"https://drive.google.com/open?id=new"}')`);
+  await db.query(`INSERT INTO "SupplyHistory" (id, "updatedAt", fy, "saleBillNumber", "saleBillDate", rate, "invoiceAmt") VALUES
+    ('a', now(), '26-27', 'OLD', '27-May-26', 10, 100), ('b', now(), '26-27', 'NEW', '2026-05-27T18:30:00.000Z', 10, 100), ('c', now(), 'bad', 'X', '28-May-26', 1, 1)`);
+  await db.query(`INSERT INTO sync_log (job, started_at, finished_at, ok) VALUES ('xlsx:TYPE_TEST_LEDGER:TTR JIST', now(), now(), true)`);
 
   const inNav = new Set(PAGES.map(reportKey));
   for (const [key, r] of Object.entries(REPORTS)) {
@@ -27,11 +34,29 @@ test('every report runs against the schema, returns its columns, and has a page 
   }
   for (const k of inNav) if (k && k !== 'status') assert.ok(REPORTS[k], `page ${k} has no report`);
 
-  assert.equal(new Set(PAGES.flatMap(p => p.no ?? [])).size, 22);   // all 22 pages of ENQUIRY TO QUOTATION (N), each once
-  assert.deepEqual(PAGES.flatMap(p => p.ce ?? []), [1, 2, 3, 4, 5]);  // and the 5 pages of CONT EX 2: 27 in all
+  assert.equal(new Set(PAGES.flatMap(p => p.no ?? [])).size, 19);   // the 22 pages of ENQUIRY TO QUOTATION (N), each once, less the removed 5 (GTP master), 17 and 21
+  assert.deepEqual(PAGES.flatMap(p => p.ce ?? []), [2, 3, 4, 5]);  // and the pages of CONT EX 2, less its home page (1)
   for (const p of PAGES.filter(p => p.ce)) assert.ok(REPORTS[reportKey(p)!].sourceNeeded);
   assert.equal((await reportRows(db, 'type-test'))[0].Laboratory, 'CPRI');
-  assert.deepEqual((await reportRows(db, 'costing-sheets')).map(r => r['Claude costing sheet']), ['https://drive.google.com/file/d/abc/view']);
+  assert.deepEqual((await reportRows(db, 'type-test')).map(r => r.certificate_href), ['/api/type-test/file?row=2', null]);   // only rows with a linked file
+  // Supply history: newest bill first whichever way the date is written, rows without a proper FY left out, no rate or amount
+  const supply = await reportRows(db, 'supply-history');
+  assert.deepEqual(supply.map(r => [r['Sale bill no.'], r['Sale bill date']]), [['NEW', '28-May-2026'], ['OLD', '27-May-2026']]);
+  assert.ok(!Object.keys(supply[0]).some(k => /rate|amt|amount/i.test(k)));
+  // Performance history: one row per certificate in serial order; the name opens the file; dates in Indian time; duplicates name their original
+  await db.query(`INSERT INTO performance_certificates (id, "updatedAt", serial, "certificateName", "certificateUrl", "issueDate", "duplicateOfId") VALUES
+    ('orig', now(), 1, 'Cert.pdf', 'http://192.168.1.190:8500/performance-certificate/x.pdf', '2021-10-20 18:30:00', NULL), ('dup', now(), 2, 'Copy.pdf', NULL, NULL, 'orig')`);
+  await db.query(`INSERT INTO "_CertSupplyHistory" ("A", "B") VALUES ('orig', 'a'), ('orig', 'b')`);
+  assert.deepEqual((await reportRows(db, 'performance')).map(r => [r.Serial, r.Certificate, r['Issue date'], r['Duplicate of'], r['Sale bills'], r.certificate_href]),
+    [['1', 'Cert.pdf', '21-Oct-2021', null, '2', 'http://192.168.1.190:8500/performance-certificate/x.pdf'], ['2', 'Copy.pdf', null, '1', null, null]]);
+  // Auto quotation: the sheet's Touhid columns are shown as "As per spec master", nowhere as Touhid
+  const [autoQ] = await reportRows(db, 'auto-quotation');
+  assert.deepEqual([autoQ['Item ID'], autoQ['RM cost/km (As per spec master)'], autoQ['Diff EXW/km (Claude - As per spec master)']], ['IT001', '4,867', '10']);
+  assert.ok(Object.keys(autoQ).length > 40 && !Object.keys(autoQ).some(c => /touhid/i.test(c)));
+  const costing = await reportRows(db, 'costing-sheets');   // newest first: ENQ-2, ENQ-1
+  assert.deepEqual(costing.map(r => r['Claude costing sheet']), [null, 'https://drive.google.com/file/d/abc/view']);
+  // Touhid's sheet: the docket's latest upload in the Cost sheet, else the text from Claude's sheet
+  assert.deepEqual(costing.map(r => r['Touhid costing sheet']), ['NOT DONE BY TOUHID', 'https://drive.google.com/open?id=new']);
   assert.ok((await lastSync(db, 'type-test'))?.at instanceof Date);
   assert.equal(await lastSync(db, 'auto-quotation'), null);
 });
