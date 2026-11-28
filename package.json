@@ -20,12 +20,17 @@
     "db:seed": "tsx sync/seed.ts",
     "sync:smartsheet": "node --liftoff-only --import tsx sync/smartsheet_sync.ts",
     "sync:gsheets": "tsx sync/gsheets_sync.ts",
+    "sync:supply-history": "tsx sync/supply_history_sync.ts",
+    "load:type-test": "tsx sync/type_test_ledger.ts",
     "sync:attachments": "tsx sync/attachments_sync.ts",
     "sync:mirror": "tsx sync/mirror_to_smartsheet.ts",
     "parity": "tsx sync/parity_check.ts",
-    "costing:parity": "tsx costing/parity.ts"
+    "costing:parity": "tsx costing/parity.ts",
+    "sync:mail": "node --liftoff-only --import tsx sync/mail_sync.ts",
+    "mail:eval": "node --liftoff-only --import tsx scripts/mailEval.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.14.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "amqplib": "^2.0.1",
@@ -34,7 +39,8 @@
     "pg": "^8.22.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.4.3",

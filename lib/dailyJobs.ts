@@ -1,6 +1,7 @@
 import { syncSmartsheetToDb } from "@/lib/smartsheet-sync";
 import { pool } from "@/lib/prisma";
 import { runGsheetsSync } from "@/sync/gsheets_sync";
+import { runSupplyHistorySync } from "@/sync/supply_history_sync";
 import {
   applyTenderAllocationPlan,
   createTenderAllocationPlan,
@@ -29,6 +30,7 @@ export interface DailyJobsResult {
     matched?: number;
   } & Partial<Record<TenderAllocationAssignee, number>>;
   sheets?: { status: "ok" | "partial" | "failed"; tabs?: number; failed?: string[]; reason?: string };
+  supply?: { status: "ok" | "failed"; rows?: number; certificates?: number; reason?: string };
   durationMs: number;
 }
 
@@ -64,7 +66,7 @@ export async function runDailyRefreshAndAllocate(
 
     let refreshed = false;
     try {
-      const sync = (await syncSmartsheetToDb()) as
+      const sync = (await syncSmartsheetToDb({ full: true })) as
         | { inserted?: number; updated?: number; skipped?: number; failed?: number }
         | undefined;
       if (sync && typeof sync.inserted === "number") {
@@ -146,6 +148,22 @@ export async function runDailyRefreshAndAllocate(
       const message = err instanceof Error ? err.message : String(err);
       result.sheets = { status: "failed", reason: message };
       console.error("[DailyJobs] Google Sheets sync failed:", message);
+    }
+
+    // Supply history and performance certificates from the tender executive database: like the sheets, reported on its own and never part of `success`.
+    try {
+      const client = await pool.connect();   // one connection: the copy uses BEGIN/COMMIT
+      try {
+        const n = await runSupplyHistorySync(client);
+        result.supply = { status: "ok", rows: n.supply, certificates: n.certificates };
+        console.log(`[DailyJobs] Supply history: ${n.supply} rows and ${n.certificates} performance certificates copied`);
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      result.supply = { status: "failed", reason: message };
+      console.error("[DailyJobs] Supply history sync failed:", message);
     }
 
     result.success = refreshed && !allocationFailed;

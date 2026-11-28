@@ -40,7 +40,7 @@ export interface DraftResult { runId: number; docketNo: string; revision: number
 export async function draftCosting(db: Db, docketNo: string, actor: string, today: string): Promise<DraftResult> {
   const items = (await db.query(
     `SELECT id, propose_erp_item, qty, unit, freight, gst_pct, mfg_pct, prof_pct, intt_pct, insp_pct, ttr_charges_pct,
-            special_value_addition_pct, special_rate_approval_dvg, actual_non_chain_bom_id, duplicate_item, party_length,
+            special_value_addition_pct, special_rate_approval_dvg, actual_non_chain_bom_id, duplicate_item, party_length, destination_pin_code,
             to_char(base_date, 'YYYY-MM-DD') AS base_date
        FROM enquiry_item WHERE docket_no = $1 AND deleted_at IS NULL ORDER BY id`, [docketNo])).rows;
   if (!items.length) throw new Error(`No live items for docket ${docketNo}`);
@@ -99,6 +99,10 @@ export async function draftCosting(db: Db, docketNo: string, actor: string, toda
           `freight per unit = 0: full-truck to per-unit conversion is an open question (OPEN_QUESTIONS Q10)${it.freight != null ? `; item-list freight ${Number(it.freight)} NOT applied` : ""}`,
           drum.note,
         );
+        // Guideline 3.5 step 5 as changed on 27 Nov 2026 (Puja still to confirm, 9.8 F): no delivery location no longer means ex-works.
+        // The only delivery field today is the item line's Destination PIN Code.
+        if (!String(it.destination_pin_code ?? "").trim())
+          warnings.push("delivery location not recorded: freight not costed - hold the offer until the location is confirmed (do not treat as ex-works unless the enquiry says so)");
 
         const input: ItemInput = {
           qty: num(it.qty) ?? 0, unit: it.unit ?? "",

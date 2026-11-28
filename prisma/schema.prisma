@@ -210,6 +210,7 @@ model Enquiry {
   smartsheet_row_id                    BigInt?
   source_sheet_id                      BigInt?
   legacy                               Json     @default("{}")
+  field_source                         Json     @default("{}")
   row_version                          Int      @default(1)
   created_at                           DateTime @default(now()) @db.Timestamptz(6)
   updated_at                           DateTime @default(now()) @db.Timestamptz(6)
@@ -327,6 +328,81 @@ model RefPicklist {
 
   @@id([list_key, sort_order])
   @@map("ref_picklist")
+}
+
+// Copied as it is from the tender executive dashboard (same model there); filled by sync/supply_history_sync.ts.
+model SupplyHistory {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fy             String?
+  saleBillNumber String?
+  saleBillDate   String?
+  partyName      String?
+  itemCode       String?
+  itemSchedule   String?
+  itemName       String?
+  lrNo           String?
+  truckNo        String?
+  partyRefNo     String?
+  partyRefDate   String?
+  contractVrNo   String?
+  quotationNo    String?
+  utility        String?
+  docketNo       String?
+  rate           Float?
+  invoiceQty     Float?
+  invoiceAmt     Float?
+
+  documentUrls        String?
+  attachmentUrl       String?
+  email               String?
+  contactNo           String?
+  certificateUrl      String?
+  certificateFileName String?
+  certificateSentDate DateTime?
+
+  lastSyncedAt DateTime @default(now())
+
+  // Performance certificates whose partyReferenceNo matches this row's partyRefNo.
+  performanceCertificates PerformanceCertificate[] @relation("CertSupplyHistory")
+
+  @@unique([saleBillNumber, itemCode])
+}
+
+// Copied as it is from the tender executive dashboard (same model there); filled by sync/supply_history_sync.ts.
+model PerformanceCertificate {
+  id        String   @id @default(uuid())
+  serial    Int      @unique @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  certificateName String?
+  certificateUrl  String?
+  partyName       String?
+  utilityOrClient String?
+  utilityNames    String?
+  itemSchedule    String?
+  useNotUse       String?
+
+  // AI-extracted from the certificate document.
+  issueDate   DateTime?
+  signingDate DateTime?
+
+  // Party reference printed on the certificate; also links the matching SupplyHistory rows.
+  partyReferenceNo String?
+
+  // Set when this certificate is a duplicate; points at the original.
+  duplicateOfId String?
+  duplicateOf   PerformanceCertificate?  @relation("CertDuplicate", fields: [duplicateOfId], references: [id], onDelete: SetNull)
+  duplicates    PerformanceCertificate[] @relation("CertDuplicate")
+
+  // SupplyHistory rows whose partyRefNo matches this certificate's partyReferenceNo.
+  supplyHistories SupplyHistory[] @relation("CertSupplyHistory")
+
+  @@index([duplicateOfId])
+  @@map("performance_certificates")
 }
 
 model SheetSnapshot {
@@ -544,4 +620,50 @@ model AppSetting {
   value String
 
   @@map("app_setting")
+}
+
+model PageSummary {
+  href      String   @id
+  text      String
+  edited_by String?
+  edited_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("page_summary")
+}
+
+model EnquiryMail {
+  thread_id        String    @id
+  kind             String?
+  matched_on       String?
+  mail_date        DateTime? @db.Timestamp(6)
+  feed_updated     DateTime? @db.Timestamp(6)
+  first_from       String?
+  first_from_email String?
+  latest_from      String?
+  to_details       String?
+  cc_details       String?
+  subject          String?
+  company          String?
+  msg_count        Int?
+  attach_names     String?
+  attach_links     String?
+  body             String?
+  ocr_text         String?
+  status           String
+  docket_no        String?
+  reason           String?
+  candidates       Json      @default("[]")
+  extracted        Json?
+  extract_model    String?
+  input_tokens     Int       @default(0)
+  output_tokens    Int       @default(0)
+  cost_usd         Decimal   @default(0) @db.Decimal
+  extracted_at     DateTime? @db.Timestamptz(6)
+  first_seen_at    DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime  @default(now()) @db.Timestamptz(6)
+  decided_by       String?
+
+  @@index([status, first_seen_at(sort: Desc)], map: "enquiry_mail_status_idx")
+  @@index([docket_no], map: "enquiry_mail_docket_idx")
+  @@map("enquiry_mail")
 }

@@ -74,3 +74,21 @@ export async function readEnquiryDetail(db: Db, docketNumber: string): Promise<E
     throw e;
   }
 }
+
+export const NEW_ENQUIRY_COLS = ["Docket", "Party", "Enquiry date", "Subject", "Status", "Created by", "Created", "Smartsheet"];
+
+/** Enquiries created in the dashboard, newest first (guideline 27 Nov 2026, section 3.2). One row = one value per NEW_ENQUIRY_COLS. */
+export async function readNewEnquiries(db: Db): Promise<string[][]> {
+  try {
+    // shortcut: newest 500 only, the list is for recent and pending work; page it in SQL if older ones are needed here.
+    const r = await db.query(`SELECT docket_no, party_name, to_char(enquiry_date, 'DD-Mon-YYYY') AS d, email_subject, enquiry_status, created_by,
+        to_char(created_at AT TIME ZONE 'Asia/Kolkata', 'DD-Mon-YYYY HH24:MI') AS c,
+        CASE WHEN docket_no LIKE 'PENDING-%' THEN 'Not mirrored (temporary docket)' WHEN mirrored_at IS NULL THEN 'Not mirrored'
+             ELSE 'Mirrored ' || to_char(mirrored_at AT TIME ZONE 'Asia/Kolkata', 'DD-Mon-YYYY HH24:MI') END AS s
+      FROM enquiry WHERE master = 'dashboard' AND deleted_at IS NULL ORDER BY created_at DESC, docket_no DESC LIMIT 500`);
+    return r.rows.map((x) => [x.docket_no, x.party_name, x.d, x.email_subject, x.enquiry_status, x.created_by, x.c, x.s].map((v) => v ?? ""));
+  } catch (e) {
+    if (isMissingTable(e)) return [];
+    throw e;
+  }
+}

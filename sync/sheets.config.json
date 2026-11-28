@@ -179,9 +179,31 @@
         {
           "name": "RM RATES",
           "headerRow": 1
+        },
+        {
+          "name": "CLAUDE COSTING SHEETS",
+          "headerRow": 1,
+          "_note": "checked live 27 Nov 2026: ENQ Docket No, Party, Utility, Quotation No, Items costed, Drive file id, Upload Costing Sheet (Claude), Touhid costing sheet (link), Touhid approval, Touhid remarks. Source of Power BI page 16 (guideline 27 Nov 2026, section 7)"
+        },
+        {
+          "name": "ITEM COSTING",
+          "headerRow": 1,
+          "_note": "checked live 28 Nov 2026: Item ID, ENQ Docket, Party, Utility, Quotation No, items, then Claude / Touhid value pairs (43 columns). Source of the Auto quotation page (lib/reports.ts), where Touhid is shown as 'As per spec master'."
         }
       ],
-      "_note": "read-only inputs. The write tabs (SUMMARY, ITEM COSTING, RM DETAIL, PENDING COSTINGS, CLAUDE COSTING SHEETS) are replaced by costing_run / item_costing / rm_detail in the new DB; sync them ONCE for history only."
+      "_note": "read-only inputs. The other write tabs (SUMMARY, RM DETAIL, PENDING COSTINGS) are replaced by costing_run / item_costing / rm_detail in the new DB; sync them ONCE for history only."
+    },
+    {
+      "key": "COST_UPLOAD",
+      "spreadsheetId": "1FK1t7FeAjQ3v4saIxJUS-5KbE6YlQv-8WFQCBRuaxDQ",
+      "tabs": [
+        {
+          "name": "Cost",
+          "headerRow": 1,
+          "_note": "checked live 28 Nov 2026: Timestamp, Paste TM No., ENQ Docket No, Upload Costing Sheet (Drive link), CONTRACT NO, CONTRACT DATE, Price Basis (about 19,000 rows, a docket can repeat). Not synced: tab PAST CONTACT VS ENQ DOCKET."
+        }
+      ],
+      "_note": "Cost: the costing sheet upload form. Gives Touhid's costing sheet link per docket on the Attachment of costing sheet page (lib/reports.ts)."
     },
     {
       "key": "MASTER_BOM_ACTUAL",
@@ -208,32 +230,15 @@
     },
     {
       "key": "SPEC_MASTER",
-      "spreadsheetId": "11TvKgxPLsAc3TVhGH1DcGePZwQiXZMTOm4OiUGOwaA8",
+      "spreadsheetId": "1lxHsPTGTHm4Qq6RpcnmkB-Lm2udZgOTO_PaDEDOJPv4",
       "tabs": [
         {
           "name": "Specification Master",
           "headerRow": 1,
-          "_note": "checked live 25 Nov 2026: ITEM SCHEDULE, PROPOSE ERP ITEM NAME @ CODE, Utility, ..., one column per RM head (about 12,400 rows)"
+          "_note": "checked live 28 Nov 2026: ITEM SCHEDULE, PROPOSE ERP ITEM NAME @ CODE, Utility, ..., one column per RM head, 40 columns. Not synced: tabs ALL Item, Drop Down."
         }
       ],
-      "_note": "Power BI Specification Master; an export from Smartsheet"
-    },
-    {
-      "key": "TYPE_TEST",
-      "spreadsheetId": "1WQxiamMK48ibN2WZlGdpIK4O3Ngyrn30jskHSklZAio",
-      "_note": "NEW TYPE TEST. Probable source of the Power BI Type Test page (unconfirmed by Puja, 25 Nov 2026). Other tabs (REQD, NOT AVAILABLE, ORDER, PHOTOS) are not synced.",
-      "tabs": [
-        {
-          "name": "TYPE TESTS AVAILABLE",
-          "headerRow": 1,
-          "_note": "checked live 25 Nov 2026: Sr No, Laboratory, Test Certificate No, Cable/Conductor Size, Type, Voltage Grade, Issued, Expire, ERP Code, Item Name"
-        },
-        {
-          "name": "ATTACHMENT",
-          "headerRow": 1,
-          "_note": "checked live 25 Nov 2026: DOCKET NO, UTILITY, LINK"
-        }
-      ]
+      "_note": "Specification Master (Hourly Sync), given 28 Nov 2026 in place of the earlier Smartsheet export 11TvKgxPLsAc3TVhGH1DcGePZwQiXZMTOm4OiUGOwaA8"
     },
     {
       "key": "DRUM_INDENT",
@@ -259,6 +264,11 @@
           "name": "drum rates",
           "headerRow": 1,
           "_note": "checked live 25 Nov 2026 (hidden tab): ITEM_CODE, ITEM_NAME, SUPPLIER, PUR ODR NO/DATE, GRN NO/DATE, qty, UM, RATE"
+        },
+        {
+          "name": "PO DUMP",
+          "headerRow": 1,
+          "_note": "confirmed by Puja 27 Nov 2026 (guideline section 6). Checked live 27 Nov 2026: purchase order lines (about 9,000 rows): Item Code, Item Name, Supplier Name, Order Number, Order Date, Grn Number, Grn Date, Rate Um, ..."
         }
       ]
     },
@@ -303,7 +313,6 @@
       "ITEM WISE BREAKUP",
       "Quotation History",
       "BOM MASTER",
-      "GTP MASTER",
       "CSD MASTER",
       "Bom Master Quad",
       "Supply History",

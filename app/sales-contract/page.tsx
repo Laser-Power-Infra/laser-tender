@@ -474,7 +474,7 @@ const SalesContractPage: React.FC = () => {
                     onToggle={val => handleColFilterToggle(sf.key, val)}
                     onClear={() => { handleClearColumnFilter(sf.key); setOpenSidebarDropdown(null); }}
                     onSelectAll={() => { setColumnFilters(prev => ({ ...prev, [sf.key]: [...(cascadingUniqueValues[sf.key] || [])] })); setPage(1); setOpenSidebarDropdown(null); }}
-                    onToggleOpen={() => setOpenSidebarDropdown(isOpen ? null : sf.key)}
+                    onToggleOpen={() => { setOpenDropdown(null); setOpenSidebarDropdown(isOpen ? null : sf.key); }}
                     panelId="sidebar-dropdown-panel"
                   />
                 )}
@@ -561,7 +561,7 @@ const SalesContractPage: React.FC = () => {
                                     selected={selected}
                                     options={cascadingUniqueValues[col.key] || []}
                                     isOpen={openDropdown === col.key}
-                                    onToggleOpen={() => setOpenDropdown(openDropdown === col.key ? null : col.key)}
+                                    onToggleOpen={() => { setOpenSidebarDropdown(null); setOpenDropdown(openDropdown === col.key ? null : col.key); }}
                                     onToggle={val => handleColFilterToggle(col.key, val)}
                                     onClear={() => { handleClearColumnFilter(col.key); setOpenDropdown(null); }}
                                     onSelectAll={() => { setColumnFilters(prev => ({ ...prev, [col.key]: [...(cascadingUniqueValues[col.key] || [])] })); setPage(1); setOpenDropdown(null); }}
@@ -575,7 +575,7 @@ const SalesContractPage: React.FC = () => {
                                   selected={selected}
                                   options={cascadingUniqueValues[col.key] || []}
                                   isOpen={openDropdown === col.key}
-                                  onToggleOpen={() => setOpenDropdown(openDropdown === col.key ? null : col.key)}
+                                  onToggleOpen={() => { setOpenSidebarDropdown(null); setOpenDropdown(openDropdown === col.key ? null : col.key); }}
                                   onToggle={val => handleColFilterToggle(col.key, val)}
                                   onClear={() => { handleClearColumnFilter(col.key); setOpenDropdown(null); }}
                                   onSelectAll={() => { setColumnFilters(prev => ({ ...prev, [col.key]: [...(cascadingUniqueValues[col.key] || [])] })); setPage(1); setOpenDropdown(null); }}

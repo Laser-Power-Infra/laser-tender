@@ -73,7 +73,9 @@ export function mapPvRows(contracts: SheetRow[], factors: SheetRow[], index: She
     const terms = g("PV TERMS"), code = g("PV DAYS (code)"), basis = g("IEEMA/ CACMAI").toUpperCase();
     const offered = parseSheetDate(g("PV OFFER DATE")), schEnd = parseSheetDate(g("SCH END")) ?? parseSheetDate(g("LAST DATE (DELIVERY SCH END)"));
     const f = factorByItem.get(g("ITEM CODE")), family = (f?.["PV FAMILY"] ?? "").trim().toUpperCase();
-    if (!baseDate) warnings.push("PV base date missing - take it from the contract/docket, do not assume");
+    // Guideline 8.1 / 9.17: the fallback is the tender's technical opening date minus one month, read from the Tenders app. That field does not exist
+    // there yet (task B04), so nothing is derived and no other date is substituted.
+    if (!baseDate) warnings.push("base date not found: not stated in the sheet, and the technical opening date is not available from the Tenders app yet (task B04) - do not assume a date");
     if (!terms) warnings.push("PV terms missing");
     if (!code) warnings.push("PV days code missing - applicable date is the sheet's, not derived");
 
@@ -84,7 +86,7 @@ export function mapPvRows(contracts: SheetRow[], factors: SheetRow[], index: She
       basis !== "IEEMA" ? (basis ? `not verified: ${basis} formula` : "IEEMA/CACMAI basis missing")
       : !f ? "item not in PV ITEM FACTORS"
       : NOT_VERIFIED_FAMILY[family] ? NOT_VERIFIED_FAMILY[family]
-      : !baseDate ? "base date missing"
+      : !baseDate ? "base date not found (technical opening date not available yet)"
       : !applicableDate ? "applicable date missing"
       : codeError ? codeError
       : codeSpec && codeSpec.kind !== "MONTHLY" ? `not verified: days code ${code.split("@")[0]} needs a daily index (only the monthly IEEMA index is loaded)`

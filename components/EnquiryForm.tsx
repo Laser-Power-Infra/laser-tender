@@ -15,13 +15,27 @@ interface Props {
   fields: FormField[];                          // formFields(kind), computed on the server
   options: Record<string, string[]>;            // picklist key -> values
   initial?: Record<string, string | null>;      // current row as text (getForEdit)
+  sources?: Record<string, FieldSource>;        // for an enquiry created from mail: where each value came from
   target: EnquiryFormTarget;
   submitLabel: string;
 }
 
+export interface FieldSource { source: string; confidence: string; note?: string }
+const SOURCE_LABEL: Record<string, string> = { mail: "from the mail", history: "from past enquiries", ai: "read by AI" };
+/** Small tag under a field of a mail-created enquiry. Low confidence and "nothing found" are marked for checking. */
+function SourceTag({ s, blank }: { s?: FieldSource; blank: boolean }) {
+  if (!s) return null;
+  const check = s.confidence === "low" || blank;
+  return (
+    <span className={`text-[11px] ${check ? "font-semibold text-[#b45309]" : "text-[#5f6368]"}`} title={s.note}>
+      {blank ? "Not filled" : SOURCE_LABEL[s.source] ?? s.source}{check ? " - please check" : s.confidence === "medium" ? " (likely)" : ""}{s.note ? `: ${s.note.length > 90 ? s.note.slice(0, 90) + "..." : s.note}` : ""}
+    </span>
+  );
+}
+
 const SELECT_MAX = 50; // longer lists (parties, utilities, ERP items, countries) become a searchable <input list>
 
-export function EnquiryForm({ fields, options, initial = {}, target, submitLabel }: Props) {
+export function EnquiryForm({ fields, options, initial = {}, sources, target, submitLabel }: Props) {
   const uid = useId();
   const router = useRouter();
   const start = (f: FormField) => (f.type === "checkbox" ? initial[f.name] === "true" : initial[f.name] ?? "");
@@ -117,6 +131,7 @@ export function EnquiryForm({ fields, options, initial = {}, target, submitLabel
                     />
                   )}
                   {f.hint && <span id={hintId} className="text-[11px] text-[#5f6368]">{f.hint}</span>}
+                  <SourceTag s={sources?.[f.name]} blank={v === ""} />
                 </div>
               );
             })}
