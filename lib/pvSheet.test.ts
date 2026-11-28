@@ -57,8 +57,8 @@ test("not offered + days code: offer-now-or-wait advice with the provisional mon
 });
 test("missing base date is flagged, never assumed", () => {
   const r = by("RC26Y-00088");
-  assert.equal(r.status, "NOT COMPUTED"); assert.equal(r.pv, null); assert.equal(r.note, "base date missing");
-  assert.ok(r.warnings.some(w => /base date missing/.test(w)));
+  assert.equal(r.status, "NOT COMPUTED"); assert.equal(r.pv, null); assert.equal(r.note, "base date not found (technical opening date not available yet)");
+  assert.ok(r.warnings.some(w => /base date not found: .*task B04/.test(w)));
 });
 test("MVCC / conductor / CACMAI rows are not computed", () => {
   assert.match(by("RC25Y-00138").note, /^not verified: MVCC/); assert.equal(by("RC25Y-00138").pv, null);

@@ -1,6 +1,7 @@
 import { DatabaseSmartsheetService } from "@/services/databaseSmartsheetService";
 import { pool } from "@/lib/prisma";
 import { runSmartsheetSync } from "@/sync/smartsheet_sync";
+import { istToday, reconcileMailEnquiries } from "@/lib/mailIngest";
 
 export interface SmartsheetRecord {
   enquiryDate: string | null;
@@ -90,13 +91,16 @@ async function fetchSmartsheetData(): Promise<{
 }
 
 // Also fills the enquiry / enquiry_item tables. Never throws: the legacy sync result must not depend on it.
-async function syncEnquiryTables(): Promise<void> {
+async function syncEnquiryTables(full: boolean): Promise<void> {
   try {
     // One dedicated connection: the sync wraps each sheet in BEGIN/COMMIT, which on the shared pool
     // would land on different connections and leave one stuck inside an open transaction.
     const client = await pool.connect();
     try {
-      await runSmartsheetSync(client, process.env.SMARTSHEET_API_TOKEN!.trim());
+      await runSmartsheetSync(client, process.env.SMARTSHEET_API_TOKEN!.trim(), 'all', { full });
+      // an enquiry the dashboard created from mail may now have been entered in Smartsheet by the team: retire the duplicate
+      const late = await reconcileMailEnquiries(client, istToday());
+      if (late.retired.length || late.flagged.length) console.log("[MailIngest] late duplicates:", JSON.stringify(late));
     } finally {
       client.release();
     }
@@ -116,7 +120,8 @@ const globalForSync = globalThis as unknown as {
   smartsheetSyncPromise?: Promise<unknown> | null;
 };
 
-export async function syncSmartsheetToDb(): Promise<unknown> {
+/** `full`: re-read every row of the enquiry and item sheets instead of only the rows Smartsheet reports as modified (the daily job does this). */
+export async function syncSmartsheetToDb(opts: { full?: boolean } = {}): Promise<unknown> {
   if (globalForSync.smartsheetSyncPromise) return globalForSync.smartsheetSyncPromise;
   if (!process.env.SMARTSHEET_API_TOKEN || !process.env.SMARTSHEET_SHEET_ID) {
     console.warn("[SmartsheetSync] SMARTSHEET_API_TOKEN or SMARTSHEET_SHEET_ID not set, skipping sync");
@@ -145,7 +150,7 @@ export async function syncSmartsheetToDb(): Promise<unknown> {
     } catch (err) {
       console.error("[SmartsheetSync] Sync failed:", err instanceof Error ? err.message : err);
     } finally {
-      await syncEnquiryTables();
+      await syncEnquiryTables(!!opts.full);
       globalForSync.smartsheetSyncPromise = null;
     }
   })();

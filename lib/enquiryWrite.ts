@@ -5,7 +5,9 @@ import { Db, SheetKind, coerce, inTransaction, loadColumns } from '../sync/lib.t
 
 const TABLE = { sales_enquiry: { table: 'enquiry', pk: 'docket_no' }, item_list: { table: 'enquiry_item', pk: 'id' } } as const;
 const BIG_LISTS: Record<string, string> = { party_name: 'parties', utility: 'utilities', propose_erp_item: 'erp_items', country: 'countries' };
-const NOT_AN_OWNER = new Set(['ALL', '1', 'TS ATTACHED', 'GTP ATTACHED', 'NO ERP CODE', 'BOM & LG %']); // owner_hint is parsed from "(...)" in the title
+// owner_hint is parsed from "(...)" in the title. 'Debosmita Nath' is not a section either: her fields (enquiry date, party, email, subject,
+// reference no) are the ones the enquiry mail fills, so they sit in General (guideline 27 Nov 2026, section 3.1).
+const NOT_AN_OWNER = new Set(['ALL', '1', 'TS ATTACHED', 'GTP ATTACHED', 'NO ERP CODE', 'BOM & LG %', 'Debosmita Nath']);
 
 export type Values = Record<string, unknown>;
 export interface FormField {

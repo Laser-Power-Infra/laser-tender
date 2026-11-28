@@ -58,15 +58,17 @@ export async function syncSheet(db: Db, cfg: { key: string; kind: SheetKind; she
   return res;
 }
 
-/** Incremental sync of the configured sheets (cursor per sheet in sync_state). Used by the CLI and by the app's Refresh Data. */
-export async function runSmartsheetSync(db: Db, token: string, want = 'all', opts: { since?: string; record?: boolean } = {}): Promise<Record<string, SyncResult>> {
+/** Incremental sync of the configured sheets (cursor per sheet in sync_state). Used by the CLI and by the app's Refresh Data.
+ *  `full` reads every row: Smartsheet's rowsModifiedSince misses some changed rows (seen 27 Nov 2026: ENQ-21815 edited on 26 Nov was never returned),
+ *  so the daily job runs full and the incremental run is only the quick refresh in between. */
+export async function runSmartsheetSync(db: Db, token: string, want = 'all', opts: { since?: string; record?: boolean; full?: boolean } = {}): Promise<Record<string, SyncResult>> {
   const cfg = loadConfig().smartsheet.filter((s: any) => want === 'all' || s.key === want);
   if (!cfg.length) throw new Error(`no sheet '${want}' in sheets.config.json`);
   const out: Record<string, SyncResult> = {};
   for (const c of cfg) {
     const started = new Date();
     const stateKey = `smartsheet:${c.key}`;
-    const since = opts.since ?? (await db.query('SELECT last_modified_cursor FROM sync_state WHERE job=$1', [stateKey])).rows[0]?.last_modified_cursor?.toISOString?.();
+    const since = opts.full ? undefined : opts.since ?? (await db.query('SELECT last_modified_cursor FROM sync_state WHERE job=$1', [stateKey])).rows[0]?.last_modified_cursor?.toISOString?.();
     const r = await syncSheet(db, c, await fetchSheet(token, c.sheetId, since));
     out[c.key] = r;
     console.log(`[${c.key}] read=${r.read} inserted=${r.inserted} updated=${r.updated} skipped=${r.skipped}` + (r.unmappedTitles.length ? ` UNMAPPED COLUMNS: ${r.unmappedTitles.join(' | ')}` : ''));
@@ -93,7 +95,7 @@ async function main() {
     return;
   }
   const { db, close } = await cliPool();
-  await runSmartsheetSync(db, smartsheetToken(), args.get('sheet') ?? 'all', { since: args.get('since') });
+  await runSmartsheetSync(db, smartsheetToken(), args.get('sheet') ?? 'all', { since: args.get('since'), full: args.has('full') });
   await close();
 }
 

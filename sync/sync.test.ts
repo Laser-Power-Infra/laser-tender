@@ -138,6 +138,12 @@ test('compareRecords treats null/""/undefined as equal and numbers numerically',
   assert.equal(compareRecords(a, b, ['x', 'y']).diffs.length, 0);
 });
 
+test('compareRecords: a Smartsheet date or timestamp equals the Date object pg returns for it', () => {
+  const a = new Map([['k', { d: '2025-12-23', t: '2026-11-13T06:27:54.000Z', other: '2025-12-24' }]]);
+  const b = new Map([['k', { d: new Date(2025, 11, 23), t: new Date('2026-11-13T06:27:54Z'), other: new Date(2025, 11, 23) }]]);
+  assert.deepEqual(compareRecords(a, b, ['d', 't', 'other']).diffs.map(x => x.column), ['other']);
+});
+
 test('mirror payload: skips system columns and empties, converts types', () => {
   const rec: Record<string, unknown> = {};
   for (const c of cols.item_list) rec[c.db_column] = null;

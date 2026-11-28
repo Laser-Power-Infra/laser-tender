@@ -179,9 +179,14 @@
         {
           "name": "RM RATES",
           "headerRow": 1
+        },
+        {
+          "name": "CLAUDE COSTING SHEETS",
+          "headerRow": 1,
+          "_note": "checked live 27 Nov 2026: ENQ Docket No, Party, Utility, Quotation No, Items costed, Drive file id, Upload Costing Sheet (Claude), Touhid costing sheet (link), Touhid approval, Touhid remarks. Source of Power BI page 16 (guideline 27 Nov 2026, section 7)"
         }
       ],
-      "_note": "read-only inputs. The write tabs (SUMMARY, ITEM COSTING, RM DETAIL, PENDING COSTINGS, CLAUDE COSTING SHEETS) are replaced by costing_run / item_costing / rm_detail in the new DB; sync them ONCE for history only."
+      "_note": "read-only inputs. The write tabs (SUMMARY, ITEM COSTING, RM DETAIL, PENDING COSTINGS) are replaced by costing_run / item_costing / rm_detail in the new DB; sync them ONCE for history only."
     },
     {
       "key": "MASTER_BOM_ACTUAL",
@@ -259,6 +264,11 @@
           "name": "drum rates",
           "headerRow": 1,
           "_note": "checked live 25 Nov 2026 (hidden tab): ITEM_CODE, ITEM_NAME, SUPPLIER, PUR ODR NO/DATE, GRN NO/DATE, qty, UM, RATE"
+        },
+        {
+          "name": "PO DUMP",
+          "headerRow": 1,
+          "_note": "confirmed by Puja 27 Nov 2026 (guideline section 6). Checked live 27 Nov 2026: purchase order lines (about 9,000 rows): Item Code, Item Name, Supplier Name, Order Number, Order Date, Grn Number, Grn Date, Rate Um, ..."
         }
       ]
     },

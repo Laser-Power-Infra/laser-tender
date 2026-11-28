@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { PGlite } from '@electric-sql/pglite';
 import type { Db } from '../sync/lib.ts';
 import { schemaSql } from '../sync/env.ts';
-import { readEnquiryTenders, readEnquiryDetail } from './enquiryRead.ts';
+import { readEnquiryTenders, readEnquiryDetail, readNewEnquiries } from './enquiryRead.ts';
 
 // One PGlite for the whole file, schema reset per test (several instances crash V8 here).
 let pglite: PGlite | undefined;
@@ -75,4 +75,17 @@ test('detail: labelled non-empty columns and the items of the docket', async () 
     { label: 'QTY', value: '65' },
   ]]);
   assert.deepEqual(await readEnquiryDetail(db, 'NOPE'), { enquiry: [], items: [] });
+});
+
+test('readNewEnquiries: dashboard-made enquiries only, newest first, with mirror status', async () => {
+  const db = await freshDb();
+  await db.query(`INSERT INTO enquiry (docket_no, party_name, master, created_at, mirrored_at, created_by) VALUES
+    ('ENQ-1', 'FROM SHEET', 'smartsheet', '2026-11-20', NULL, NULL),
+    ('ENQ-7', 'MIRRORED', 'dashboard', '2026-11-21', '2026-11-22 06:00+00', 'a@x.com'),
+    ('PENDING-3', 'NEW', 'dashboard', '2026-11-25', NULL, 'b@x.com')`);
+  const rows = await readNewEnquiries(db);
+  assert.deepEqual(rows.map(r => [r[0], r[5], r[7]]), [
+    ['PENDING-3', 'b@x.com', 'Not mirrored (temporary docket)'],
+    ['ENQ-7', 'a@x.com', 'Mirrored 22-Nov-2026 11:30'],
+  ]);
 });

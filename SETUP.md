@@ -238,6 +238,11 @@ Separate from the nightly costing job above. Once a day, **ofelia** (the schedul
 - Each run does the refresh first, then the allocation. If the refresh does not complete
   (or saves nothing), allocation is skipped and the job reports `"success": false`, which
   ofelia records as a failed run.
+- The daily refresh re-reads **every row** of the Smartsheet enquiry and item sheets (about
+  3 minutes, measured 27 Nov 2026), because Smartsheet's "rows modified since" filter misses
+  some changed rows. The **Refresh Data** button still reads only the rows Smartsheet reports
+  as modified, so it stays quick. The ofelia timeout must allow for these 3 minutes too.
+  By hand: `npm run sync:smartsheet -- --full`.
 - After the allocation the same run re-reads every Google Sheet in `sync/sheets.config.json`
   (rates, BOM, ERP dumps, pre-approved GTP...). This adds a few minutes, so the timeout in the
   ofelia script must allow for it. A sheet that fails keeps yesterday's data and does **not**
@@ -318,3 +323,27 @@ npm run sync:gsheets                      # Google tabs -> sheet_snapshot, rm_ra
 - `npm run sync:mirror` WRITES dashboard-created rows to Smartsheet (formula columns are skipped). It has never been run against the live sheet: try it with `-- --dry-run` first. Formula results (Account Holder, Difference in Days, ...) do not come back into the dashboard for those rows yet.
 - `npm run sync:gsheets` also fills `freight_rate`, `drum_master` and `drums_per_truck` from the CLAUDE COSTINGS spreadsheet (shared with the service account on 24 Nov 2026).
 - Docs: `docs/enquiry-platform/`.
+
+## Enquiry mails: enquiries created from mail
+
+The dashboard reads Laser enquiry mails from the Email Dashboard (`GET /api/db-emails/enquiries`), links each one to its
+enquiry when that already exists, and otherwise reads it with AI and creates a `PENDING-n` enquiry with the fields filled.
+Page: **Enquiry > Enquiry mails**. Nothing is sent to anyone and nothing is written to Smartsheet or the Email Dashboard.
+
+- **Needs the migration** `prisma/migrations/20261127150000_enquiry_mail` (table `enquiry_mail`, column `enquiry.field_source`).
+  Until it is deployed the page says so and no run does anything.
+- **Settings** (`.env` / `.env.production`):
+  - `EMAIL_DASHBOARD_URL` and `ENQUIRY_FEED_API_KEY`: the feed and its key (the same key as in the Email Dashboard).
+  - `CLAUDE_API_KEY`: the AI reading. Without it mails are stored and linked but none is read or created.
+  - `MAIL_AI_MODEL` (default `claude-haiku-5-5`), `MAIL_AI_ESCALATE_MODEL` (default `claude-sonnet-5-5`, `none` to switch
+    the second reading off), `MAIL_AI_MAX_PER_RUN` (default 25 mails read per run).
+- **Schedule:** ofelia should call `POST /api/scheduler/enquiry-mail-sync` every 10 minutes with the same key as the daily
+  job (`WORKER_API_KEY`). `GET` on the same address only checks the key. The **Check mail now** button on the page does one
+  run by hand.
+- **By hand:** `npm run sync:mail -- --dry-run` reads the live feed and reports what a run would do, without writing or
+  calling AI. `npm run sync:mail` does one real run.
+- **Duplicates:** a mail whose subject and sender match an existing enquiry is linked, never created. A mail that only looks
+  like an existing one goes to **To review**. After every Smartsheet sync, a mail-created `PENDING-n` enquiry that the team
+  has meanwhile entered in Smartsheet is retired if nobody edited it, or flagged for review if somebody did.
+- **Accuracy and cost:** `npm run mail:eval` re-runs the accuracy check against the team's own entries (it spends about one
+  US dollar). The page shows each day's AI cost.

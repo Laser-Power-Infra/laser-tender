@@ -2,7 +2,7 @@ import Link from "next/link";
 import { pool } from "@/lib/prisma";
 import { formFields, getForEdit, listItems } from "@/lib/enquiryWrite";
 import { getPicklistOptions } from "@/actions/enquiryWrite";
-import { EnquiryForm } from "@/components/EnquiryForm";
+import { EnquiryForm, type FieldSource } from "@/components/EnquiryForm";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +39,16 @@ export default async function EditEnquiryPage({ params, searchParams }: { params
     if ((err as { code?: string })?.code !== "42P01") throw err;
     return <Shell title={docket}><Notice>Not available yet: the enquiry tables are not deployed in this database.</Notice></Shell>;
   }
+  // Mails read from the Email Dashboard for this docket, and where its autofilled values came from. Absent until the enquiry_mail migration is deployed.
+  let mails: Row[] = [], sources: Record<string, FieldSource> = {};
+  if (enquiry) try {
+    mails = (await pool.query(`SELECT thread_id, to_char(mail_date, 'DD-Mon-YYYY HH24:MI') AS d, first_from, subject, msg_count::text AS msg_count, attach_names, attach_links, left(body, 6000) AS body, status
+      FROM enquiry_mail WHERE docket_no = $1 ORDER BY mail_date`, [docket])).rows;
+    sources = (await pool.query("SELECT field_source FROM enquiry WHERE docket_no = $1", [docket])).rows[0]?.field_source ?? {};
+  } catch (err) {
+    if (!["42P01", "42703"].includes((err as { code?: string })?.code ?? "")) throw err;
+  }
+  const fromMail = Object.keys(sources).length > 0;
   if (!enquiry) return <Shell title={docket}><Notice>Enquiry {docket} was not found. A temporary PENDING number stops working once Smartsheet has issued the real docket number.</Notice></Shell>;
 
   const fields = formFields("sales_enquiry");
@@ -53,8 +63,38 @@ export default async function EditEnquiryPage({ params, searchParams }: { params
         <Notice>Temporary docket number. Smartsheet issues the real one at the next mirror run; this page then moves to the new number.</Notice>
       )}
 
+      {fromMail && (
+        <Notice>Created automatically from the enquiry mail. Each filled field says where its value came from; fields marked &quot;please check&quot; were read with low confidence or could not be found.</Notice>
+      )}
+
+      {mails.length > 0 && (
+        <section className="tender-detail-section" aria-labelledby="mail-title">
+          <h2 id="mail-title" className="tender-detail-section-title">Enquiry mail</h2>
+          {mails.map(m => {
+            const names = (m.attach_names ?? "").split(",").map(s => s.trim()).filter(Boolean);
+            const links = (m.attach_links ?? "").split(",").map(s => s.trim());
+            return (
+              <div key={m.thread_id} className="flex flex-col gap-1 text-[13px]">
+                <div><strong>{m.subject}</strong></div>
+                <div className="text-[#5f6368]">{m.first_from} · {m.d} · {m.msg_count} message{m.msg_count === "1" ? "" : "s"}</div>
+                {names.length > 0 && (
+                  <div className="flex flex-wrap gap-x-3">
+                    {names.map((n, i) => /^https:\/\//.test(links[i] ?? "")
+                      ? <a key={i} href={links[i]} target="_blank" rel="noopener noreferrer" className="underline">{n}</a> : <span key={i}>{n}</span>)}
+                  </div>
+                )}
+                <details>
+                  <summary className="cursor-pointer text-[#5f6368]">Mail text</summary>
+                  <pre className="m-0 max-h-[320px] overflow-auto whitespace-pre-wrap font-sans text-[12px]">{m.body}</pre>
+                </details>
+              </div>
+            );
+          })}
+        </section>
+      )}
+
       {enquiry.master === "dashboard"
-        ? <EnquiryForm fields={fields} options={options} initial={enquiry} target={{ op: "updateEnquiry", docketNo: docket }} submitLabel="Save enquiry" />
+        ? <EnquiryForm fields={fields} options={options} initial={enquiry} sources={fromMail ? sources : undefined} target={{ op: "updateEnquiry", docketNo: docket }} submitLabel="Save enquiry" />
         : <Notice>{READ_ONLY}</Notice>}
 
       <section className="tender-detail-section" aria-labelledby="item-lines-title">

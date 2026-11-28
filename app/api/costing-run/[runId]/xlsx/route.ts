@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { pool } from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth";
 import { readCostingRuns, DRAFT_BANNER } from "@/lib/costingRun";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +10,8 @@ const n = (v: string | null) => (v == null ? "" : Number(v));
 
 // Plain workbook of one draft run (SUMMARY / ITEM COSTING / RM DETAIL). NOT Touhid's template.
 export async function GET(_request: Request, { params }: { params: Promise<{ runId: string }> }) {
+  // costing sheets are restricted documents: signed-in users only
+  if (!(await getSessionUser())) return NextResponse.json({ error: "Sign in required" }, { status: 401 });
   const { runId } = await params;
   if (!/^\d+$/.test(runId)) return NextResponse.json({ error: "Invalid run id" }, { status: 400 });
 

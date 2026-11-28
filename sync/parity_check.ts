@@ -12,9 +12,16 @@ export interface ParityReport { smartsheetRows: number; dbRows: number; missingI
 const same = (a: unknown, b: unknown) => {
   if (a === null || a === undefined || a === '') return b === null || b === undefined || b === '';
   if (typeof a === 'number' || typeof b === 'number') return Number(a) === Number(b);
-  if (a instanceof Date) a = a.toISOString().slice(0, 10);
-  if (b instanceof Date) b = (b as Date).toISOString().slice(0, 10);
-  return String(a).trim() === String(b).trim();
+  // pg returns Date objects: a `date` column as local midnight (so the UTC day can be the day before), a timestamptz as the instant.
+  const text = (v: unknown, other: unknown) => {
+    if (!(v instanceof Date)) return String(v).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(other).trim())) return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getDate()).padStart(2, '0')}`;
+    return v.toISOString();
+  };
+  const [x, y] = [text(a, b), text(b, a)];
+  const [tx, ty] = [Date.parse(x), Date.parse(y)];
+  // two timestamps are equal when they are the same instant, whatever their text form
+  return x === y || (x.includes('T') && y.includes('T') && !Number.isNaN(tx) && tx === ty);
 };
 
 /** Pure: compare mapped Smartsheet records with DB records. keyOf picks the identity (docket_no for enquiries, smartsheet_row_id for items). */
@@ -49,6 +56,7 @@ async function main() {
   for (const c of loadConfig().smartsheet.filter((s: any) => want === 'all' || s.key === want)) {
     const rep = await checkSheet(pool, c.kind, c.sheetId, await fetchSheet(smartsheetToken(), c.sheetId));
     console.log(`[${c.key}] smartsheet=${rep.smartsheetRows} db=${rep.dbRows} missingInDb=${rep.missingInDb.length} extraInDb=${rep.extraInDb.length} diffs=${rep.diffs.length}`);
+    if (rep.missingInDb.length) console.log('  missing in DB:', rep.missingInDb.slice(0, 20).join(', '));
     rep.diffs.slice(0, 20).forEach(d => console.log('  diff', d.key, d.column, JSON.stringify(d.smartsheet), '!=', JSON.stringify(d.db)));
     if (rep.missingInDb.length || rep.diffs.length) bad++;
   }

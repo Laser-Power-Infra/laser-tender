@@ -51,6 +51,59 @@
     @apply border-brand text-brand;
   }
 
+  /* Grouped pages: the menu opens on hover and on keyboard focus (no script). */
+  .tab-group {
+    @apply relative h-full;
+  }
+
+  .tab-menu {
+    @apply absolute left-0 top-full hidden min-w-[230px] flex-col border border-line bg-white py-1 shadow-lg;
+  }
+
+  .tab-group:hover .tab-menu,
+  .tab-group:focus-within .tab-menu {
+    @apply flex;
+  }
+
+  .tab-menu-item {
+    @apply block whitespace-nowrap px-4 py-2 font-sans text-[12px] font-semibold text-[#3c4043] no-underline;
+  }
+
+  .tab-menu-item:hover,
+  .tab-menu-item:focus-visible {
+    @apply bg-mist text-navy;
+  }
+
+  .tab-menu-item.active {
+    @apply text-brand;
+  }
+
+  /* Hover summaries (guideline 9.7): what a group is about heads its menu; each page's summary opens beside its row
+     on hover, keyboard focus and touch. */
+  .tab-menu-note {
+    @apply m-0 max-w-[300px] whitespace-normal border-b border-line px-4 pb-2 pt-1 font-sans text-[11px] font-normal normal-case text-[#5f6368];
+  }
+
+  .tab-menu-row {
+    @apply relative;
+  }
+
+  .tab-tip {
+    @apply pointer-events-none absolute left-full top-0 z-10 hidden w-[280px] whitespace-normal border border-line bg-navy px-3 py-2 font-sans text-[11px] font-normal normal-case leading-snug text-white shadow-lg;
+    letter-spacing: 0;
+  }
+
+  .tab-tip-below {
+    @apply left-0 top-full;
+  }
+
+  .tab-menu-row:hover > .tab-tip,
+  .tab-menu-row:focus-within > .tab-tip,
+  .tab-group:hover > .tab-tip,
+  .tab-group:focus-within > .tab-tip {
+    @apply block;
+  }
+
   .tab-btn .tab-icon {
     @apply text-[13px];
   }

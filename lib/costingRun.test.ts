@@ -54,7 +54,7 @@ test('draft run: BOM item gets rm_detail with source + formula, item without BOM
   // XLPE CCV-TR has no rate: the RM detail is kept but no (understated) totals are stored
   assert.deepEqual([a.rm_cost, a.ex_works, a.price_ex_gst, a.price_incl_gst], [null, null, null, null]);
   const w = a.warnings.join('\n');
-  for (const re of [/XLPE CCV-TR: no rate/, /RM cost incomplete/, /Special VA % 0.02 NOT applied: no DVG approval/, /placement of PROF %, TTR % and special VA % is NOT verified/, /Q10.*freight 25000 NOT applied/, /drum cost per unit = 0: item FA1300213 not in STD DRUM MAP/, /blank % column\(s\) taken as 0: ttr/])
+  for (const re of [/XLPE CCV-TR: no rate/, /RM cost incomplete/, /Special VA % 0.02 NOT applied: no DVG approval/, /placement of PROF %, TTR % and special VA % is NOT verified/, /Q10.*freight 25000 NOT applied/, /drum cost per unit = 0: item FA1300213 not in STD DRUM MAP/, /blank % column\(s\) taken as 0: ttr/, /delivery location not recorded: freight not costed - hold the offer/])
     assert.match(w, re);
 
   assert.deepEqual([b.it_code, b.bom_match_note, b.rm.length], ['IT002', 'no ACTUAL NON CHAIN BOM ID', 0]);

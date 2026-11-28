@@ -42,6 +42,13 @@ export function FilterTable({ title, badge, cols, rows }: { title: string; badge
   const setSel = (c: number, v: string[]) => { setSelected(prev => setAt(prev, c, v, [])); setPage(1); };
   const filtered = q.trim() !== "" || searches.some(s => s?.trim()) || selected.some(s => s?.length);
   const clearAll = () => { setQ(""); setSearches([]); setSelected([]); setOpen(null); setPage(1); };
+  // Every row that passes the filters (not just this page). xlsx is loaded on click so it stays out of the page bundle.
+  const exportExcel = async () => {
+    const XLSX = await import("xlsx");
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([cols.map(c => c.label), ...visible.map(i => rows[i].text)]), "Data");
+    XLSX.writeFile(wb, `${title.replace(/[\\/:*?"<>|]/g, " ").trim()}.xlsx`);
+  };
 
   const pages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const current = Math.min(page, pages);
@@ -67,6 +74,7 @@ export function FilterTable({ title, badge, cols, rows }: { title: string; badge
             style={{ paddingLeft: 12, width: 240 }}
           />
           {filtered && <button type="button" className="smartsheet-page-btn" onClick={clearAll}>Clear filters</button>}
+          <button type="button" className="smartsheet-page-btn" disabled={visible.length === 0} onClick={exportExcel}>Export to Excel</button>
         </div>
       </div>
 

@@ -64,7 +64,7 @@ export async function runDailyRefreshAndAllocate(
 
     let refreshed = false;
     try {
-      const sync = (await syncSmartsheetToDb()) as
+      const sync = (await syncSmartsheetToDb({ full: true })) as
         | { inserted?: number; updated?: number; skipped?: number; failed?: number }
         | undefined;
       if (sync && typeof sync.inserted === "number") {
